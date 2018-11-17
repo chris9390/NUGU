@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory
 import os
 import json
 import requests
+import random
 
 
 
@@ -274,6 +275,9 @@ def detail_ingredients():
 
     return jsonify(response)
 
+
+next_step_invoke = ['아리아, [요리왕]에서 다음 안내 들려줘', '아리아, [요리왕]에서 다음 차례는 뭐야?', '아리아, [요리왕]에서 다음엔 뭘 하면 될까?', '아리아, [요리왕]에서 다음에 뭐해?']
+
 @app.route('/answer.first_step_recipe', methods=['POST'])
 def first_step_recipe():
     response = {}
@@ -287,19 +291,22 @@ def first_step_recipe():
 
     check_user(accessToken, response)
 
-    with open('./info.json', 'r') as f:
-        info = json.load(f)
-        current_recipe_step = info['recipe_step']
+
+    # 첫번째 step 이기때문에 1로 고정 설정
+    current_recipe_step = 1
 
     with open('./sample.json', 'r') as f:
-        sample = json.load(f)
+         sample = json.load(f)
 
     output = {}
     for param in parameters:
         output[param] = parameters[param]['value']
 
+    # 다음 단계 예상 발화 랜덤 발생
+    rand_num = random.randrange(0, len(next_step_invoke))
+
     # 첫번째 레시피 step 알림
-    output['fulfillment_first_step_recipe'] = sample['recipe'][current_recipe_step] + ' 다 되시면 "아리아, [요리왕]에서 다음 안내 들려줘” 라고 이야기 해 주세요.'
+    output['fulfillment_first_step_recipe'] = sample['recipe'][current_recipe_step] + ' 다 되시면' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
 
     update_info_json_file(accessToken, action_name, current_recipe_step)
 
@@ -346,11 +353,14 @@ def next_step_recipe():
     # step 1 증가 후 info.json에 입력
     update_info_json_file(accessToken, action_name, current_recipe_step)
 
+    # 다음 단계 예상 발화 랜덤 발생
+    rand_num = random.randrange(0, len(next_step_invoke))
+
     # 마지막 recipe step 이라면
     if current_recipe_step + 1 == len(sample['recipe']):
         output['fulfillment_next_step_recipe'] += ' 이것이 요리의 마지막 안내입니다. 다시들으시려면 "아리아, [요리왕] 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
     else:
-        output['fulfillment_next_step_recipe'] += ' 다 되시면 "아리아, [요리왕]에서 다음 안내 들려줘” 라고 이야기 해 주세요.'
+        output['fulfillment_next_step_recipe'] += ' 다 되시면' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
 
     response['version'] = '2.0'
     response['output'] = output
