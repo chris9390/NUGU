@@ -6,36 +6,12 @@ import random
 
 
 
-app = Flask(__name__, static_folder='music')
+app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
 UPLOAD_FOLDER = 'music'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# 여기에는 해당 action 이름이 와야한다.
-@app.route('/answer.weather', methods=['POST'])
-def weather():
-    req = json.loads(request.data.decode('utf-8'))
-    action_name = req['action']['actionName']
-    parameters = req['action']['parameters']
-
-    response = {}
-
-    # output부분이 리턴되어서 출력된다.
-    output = {}
-    # output에는 Request의 모든 parameter가 포함되어야 한다. (value는 바뀔 수 있음)
-    for param in parameters:
-        output[param] = parameters[param]['value']
-
-    output['fulfillment'] = '맑습니다.'
-
-
-    response['version'] = '2.0'
-    response['resultCode'] = 'OK'
-    response['output'] = output
-    response['directives'] = {}
-
-    return jsonify(response)
 
 
 
@@ -64,7 +40,7 @@ def realtime():
 
     audioItem = {}
     stream = {}
-    stream['url'] = 'http://163.239.169.54:5001/stream/music1.mp4'  # 무슨 url ...?
+    stream['url'] = 'http://163.239.169.54:5001/stream/music1.mp3'  # 무슨 url ...?
     stream['offsetInMilliseconds'] = 0  # 노래 재생 시작지점 '0'이면 처음부터
 
     '''
@@ -73,7 +49,7 @@ def realtime():
     progressReport['progressReportIntervalInMilliseconds'] = 0
     stream['progressReport'] = progressReport
     '''
-    stream['progressReport'] = {}
+    stream['progressReport'] = None
 
     stream['token'] = 'something'  # 현재 stream을 나타내는 토큰?
     stream['expectedPreviousToken'] = 'something'   # 이전 stream?
@@ -83,35 +59,10 @@ def realtime():
 
     AudioPlayer['audioItem'] = audioItem
 
-    AudioPlayer_ = {}
-    AudioPlayer_['AudioPlayer'] = AudioPlayer
 
-    response['directives'] = AudioPlayer_
+    response['directives'] = [AudioPlayer]
 
     print(json.dumps(response, indent=4))
-
-    return jsonify(response)
-
-
-@app.route('/answer.music', methods=['POST'])
-def music():
-    req = json.loads(request.data.decode('utf-8'))
-    action_name = req['action']['actionName']
-    parameters = req['action']['parameters']
-
-    response = {}
-
-    # output부분이 리턴되어서 출력된다.
-    output = {}
-    # output에는 Request의 모든 parameter가 포함되어야 한다. (value는 바뀔 수 있음)
-    for param in parameters:
-        output[param] = parameters[param]['value']
-    output['fulfillment'] = '틀어드릴까요?'
-
-    response['version'] = '2.0'
-    response['resultCode'] = 'OK'
-    response['output'] = output
-    response['directives'] = {}
 
     return jsonify(response)
 
@@ -135,6 +86,8 @@ def update_info_json_file(accessToken, action_name, current_recipe_step):
         info['before_action'] = action_name
         info['recipe_step'] = current_recipe_step + 1
         json.dump(info, f, ensure_ascii=False, indent=4)
+
+
 
 
 
@@ -196,13 +149,16 @@ def recommend_recipe2():
     # 한식, 중식, 양식, 분식
     food_kind = parameters['food_kind']['value']
 
+    with open('./sample.json', 'r') as f:
+        sample = json.load(f)
 
 
     output = {}
     for param in parameters:
         output[param] = parameters[param]['value']
 
-    output['fulfillment_recommend_recipe2'] = '오늘의 ' + food_kind + '는 크림 스파게티 입니다. 안내를 원하시면 "안내해줘" 라고 말씀해주세요.'
+    output['fulfillment_recommend_recipe2'] = '오늘의 ' + food_kind + '는 ' +  sample['food_name'] + '입니다.'
+    output['fulfillment_recommend_recipe2'] += ' 안내를 원하시면 "재료 안내해줘" 라고 말씀해주세요.'
 
     response['version'] = '2.0'
     response['output'] = output
@@ -237,7 +193,9 @@ def inform_ingredients():
         output[param] = parameters[param]['value']
 
 
-    output['fulfillment_inform_ingredients'] = '필요한 재료는 ' + sample['simple_ingredients'] + ' 입니다. 자세한 설명을 들으시려면 "재료설명 들려줘" 라고 말씀해주시고, 바로 레시피 안내를 원하시면 "레시피 시작" 이라고 말씀해주세요.'
+    output['fulfillment_inform_ingredients'] = '필요한 재료는 ' + sample['simple_ingredients'] + ' 입니다.'
+    output['fulfillment_inform_ingredients'] += ' 자세한 설명을 들으시려면 "재료 자세히 알려줘" 라고 말씀해주시고,'
+    output['fulfillment_inform_ingredients'] += ' 바로 레시피 안내를 원하시면 "레시피 시작" 이라고 말씀해주세요.'
 
     response['version'] = '2.0'
     response['output'] = output
@@ -266,7 +224,8 @@ def detail_ingredients():
     for param in parameters:
         output[param] = parameters[param]['value']
 
-    output['fulfillment_detail_ingredients'] = sample['detail_ingredients'] + ' 이 필요합니다. 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
+    output['fulfillment_detail_ingredients'] = sample['detail_ingredients'] + ' 이 필요합니다.'
+    output['fulfillment_detail_ingredients'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
 
 
     response['version'] = '2.0'
@@ -276,7 +235,10 @@ def detail_ingredients():
     return jsonify(response)
 
 
-next_step_invoke = ['아리아, [요리왕]에서 다음 안내 들려줘', '아리아, [요리왕]에서 다음 차례는 뭐야?', '아리아, [요리왕]에서 다음엔 뭘 하면 될까?', '아리아, [요리왕]에서 다음에 뭐해?']
+next_step_invoke = ['아리아, [요리왕]에서 다음 안내 들려줘',
+                    '아리아, [요리왕]에서 다음 차례는 뭐야?',
+                    '아리아, [요리왕]에서 다음엔 뭘 하면 될까?',
+                    '아리아, [요리왕]에서 다음에 뭐해?']
 
 @app.route('/answer.first_step_recipe', methods=['POST'])
 def first_step_recipe():
@@ -306,7 +268,7 @@ def first_step_recipe():
     rand_num = random.randrange(0, len(next_step_invoke))
 
     # 첫번째 레시피 step 알림
-    output['fulfillment_first_step_recipe'] = sample['recipe'][current_recipe_step] + ' 다 되시면' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+    output['fulfillment_first_step_recipe'] = sample['recipe'][current_recipe_step] + ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
 
     update_info_json_file(accessToken, action_name, current_recipe_step)
 
@@ -360,15 +322,106 @@ def next_step_recipe():
     if current_recipe_step + 1 == len(sample['recipe']):
         output['fulfillment_next_step_recipe'] += ' 이것이 요리의 마지막 안내입니다. 다시들으시려면 "아리아, [요리왕] 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
     else:
-        output['fulfillment_next_step_recipe'] += ' 다 되시면' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+        output['fulfillment_next_step_recipe'] += ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
 
     response['version'] = '2.0'
     response['output'] = output
     response['directives'] = None
 
 
+    return jsonify(response)
+
+
+@app.route('/answer.explain_ingredients_again', methods=['POST'])
+def explain_ingredients_again():
+    response = {}
+    req = json.loads(request.data.decode('utf-8'))
+    try:
+        accessToken = req['context']['session']['accessToken']
+    except:
+        # OAuth 를 사용하지 않는 경우
+        accessToken = 'dev'
+
+    action_name = req['action']['actionName']
+    parameters = req['action']['parameters']
+
+    check_user(accessToken, response)
+
+    with open('./info.json', 'r') as f:
+        info = json.load(f)
+        current_recipe_step = info['recipe_step']
+
+
+    with open('./info.json', 'w', encoding='utf-8') as f:
+        info = {}
+        info['accessToken'] = accessToken
+        # 다음 action 입장에선 지금 이 action이 전 단계의 action이기 때문에 before_action 이라고 명칭.
+        info['before_action'] = action_name
+        info['recipe_step'] = current_recipe_step
+        json.dump(info, f, ensure_ascii=False, indent=4)
+
+
+    with open('./sample.json', 'r') as f:
+        sample = json.load(f)
+
+
+    output = {}
+    for param in parameters:
+        output[param] = parameters[param]['value']
+
+    output['fulfillment_explain_ingredients_again'] = sample['detail_ingredients'] + ' 입니다.'
+    output['fulfillment_explain_ingredients_again'] += ' 현재 단계를 다시 들으시려면 "아리아, [요리왕]에서 방금 안내 다시 들려줘" 라고 이야기 해 주시고,'
+    output['fulfillment_explain_ingredients_again'] += ' 다음 단계로 넘어가시려면 "아리아, [요리왕]에서 다음 안내 들려줘" 라고 이야기 해 주세요.'
+
+    response['version'] = '2.0'
+    response['output'] = output
+    response['directives'] = None
 
     return jsonify(response)
+
+
+@app.route('/answer.recent_step_recipe', methods=['POST'])
+def recent_step_recipe():
+    response = {}
+    req = json.loads(request.data.decode('utf-8'))
+    try:
+        accessToken = req['context']['session']['accessToken']
+    except:
+        # OAuth 를 사용하지 않는 경우
+        accessToken = 'dev'
+
+    action_name = req['action']['actionName']
+    parameters = req['action']['parameters']
+
+    check_user(accessToken, response)
+
+    with open('./info.json', 'r') as f:
+        info = json.load(f)
+        current_recipe_step = info['recipe_step']
+        # 방금 전 단계를 가리키기 위해 -1
+        current_recipe_step -= 1
+
+
+    with open('./sample.json', 'r') as f:
+        sample = json.load(f)
+
+    output = {}
+    for param in parameters:
+        output[param] = parameters[param]['value']
+
+
+    # 다음 단계 예상 발화 랜덤 발생
+    rand_num = random.randrange(0, len(next_step_invoke))
+
+    output['fulfillment_recent_step_recipe'] = sample['recipe'][current_recipe_step] + ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+
+
+    response['version'] = '2.0'
+    response['output'] = output
+    response['directives'] = None
+
+    return jsonify(response)
+
 
 # ======================================================================================================================
 
