@@ -122,8 +122,8 @@ def ask_recipe():
     except:
         accessToken = 'dev'
 
-    # 레시피 안내 시작전이기 때문에 step은 1로 초기 설정
-    update_info_json_file(accessToken, action_name, 1)
+    # 레시피 안내 시작전이기 때문에 step은 0으로 초기 설정
+    update_info_json_file(accessToken, action_name, 0)
 
 
     output = {}
@@ -172,8 +172,8 @@ def inform_food_type():
         json.dump(info, f, ensure_ascii=False, indent=4)
 
 
-    # 레시피 안내 시작전이기 때문에 step은 1로 초기 설정
-    update_info_json_file(accessToken, action_name, 1)
+    # 레시피 안내 시작전이기 때문에 step은 0으로 초기 설정
+    update_info_json_file(accessToken, action_name, 0)
 
 
     output = {}
@@ -247,17 +247,32 @@ def ask_ingredients():
     with open('./sample.json', 'r') as f:
         sample = json.load(f)
 
-    # 레시피 안내 시작전이기 때문에 step은 1로 초기 설정
-    update_info_json_file(accessToken, action_name, 1)
+    with open('./info.json', 'r') as f:
+        info = json.load(f)
+        # ask_ingredients intent로 들어오기 전에 무슨 action이었는지 확인
+        before_action = info['before_action']
+        current_recipe_step = info['recipe_step']
+
+
 
     output = {}
     for param in parameters:
         output[param] = parameters[param]['value']
 
+    # 레시피 설명 시작 전
+    if current_recipe_step == 0:
+        output['fulfillment_ask_ingredients'] = sample['detail_ingredients'] + ' 이 필요합니다.'
+        output['fulfillment_ask_ingredients'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
 
+        # 레시피 안내 시작전이기 때문에 step은 0으로 초기 설정
+        update_info_json_file(accessToken, action_name, 0)
+    # 레시피 설명 도중
+    else:
+        output['fulfillment_ask_ingredients'] = sample['detail_ingredients'] + ' 입니다.'
+        output['fulfillment_ask_ingredients'] += ' 현재 단계를 다시 들으시려면 "아리아, [요리왕]에서 방금 안내 다시 들려줘" 라고 이야기 해 주시고,'
+        output['fulfillment_ask_ingredients'] += ' 다음 단계로 넘어가시려면 "아리아, [요리왕]에서 다음 안내 들려줘" 라고 이야기 해 주세요.'
 
-    output['fulfillment_ask_ingredients'] = sample['detail_ingredients'] + ' 이 필요합니다.'
-    output['fulfillment_ask_ingredients'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
+        update_info_json_file(accessToken, action_name, current_recipe_step)
 
 
     response['version'] = '2.0'
@@ -476,19 +491,22 @@ def start():
         info = json.load(f)
         # start intent로 들어오기 전에 무슨 action이었는지 확인
         before_action = info['before_action']
+        current_recipe_step = info['recipe_step']
 
     output = {}
     for param in parameters:
         output[param] = parameters[param]['value']
 
     # 레시피 설명하기 전 처음으로 가고자 할 경우
-    if before_action in possible_action_before_recipe:
+    if current_recipe_step == 0:
         output['fulfillment_start'] = '한식, 중식, 일식, 양식, 분식 중에 선택해주세요.'
+        update_info_json_file(accessToken, action_name, 0)
     # 레시피 설명 도중 처음으로 가고자 할 경우
     else:
         output['fulfillment_start'] = '다른 레시피를 추천해드릴까요? "응" 또는 "아니" 로 말씀해주세요.'
+        update_info_json_file(accessToken, action_name, current_recipe_step)
 
-    update_info_json_file(accessToken, action_name, 1)
+
 
     response['version'] = '2.0'
     response['output'] = output
@@ -524,7 +542,7 @@ def confirm_yes():
         output['fulfillment_confirm_yes'] = '한식, 중식, 일식, 양식, 분식 중에 선택해주세요.'
 
 
-    update_info_json_file(accessToken, action_name, 1)
+    update_info_json_file(accessToken, action_name, 0)
 
     response['version'] = '2.0'
     response['output'] = output
@@ -551,8 +569,6 @@ def confirm_no():
         # confirm_no intent로 들어오기 전에 무슨 action이었는지 확인
         before_action = info['before_action']
 
-    with open('./sample.json', 'r') as f:
-        sample = json.load(f)
 
     output = {}
     for param in parameters:
@@ -560,14 +576,11 @@ def confirm_no():
 
 
     if before_action == 'answer.start':
-        # 다음 단계 예상 발화 랜덤 발생
-        rand_num = random.randrange(0, len(next_step_invoke))
-        current_recipe_step = 1
-        output['fulfillment_confirm_no'] = '그럼 현재 레시피를 처음 단계부터 다시 알려드릴게요. ' + sample['recipe'][current_recipe_step]
-        output['fulfillment_confirm_no'] += ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+        output['fulfillment_confirm_no'] = '그럼 현재 레시피를 처음 단계부터 다시 알려드릴게요.'
+        output['fulfillment_confirm_no'] += ' 레시피 설명을 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
 
 
-    update_info_json_file(accessToken, action_name, current_recipe_step + 1)
+    update_info_json_file(accessToken, action_name, 0)
 
     response['version'] = '2.0'
     response['output'] = output
