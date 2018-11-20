@@ -15,9 +15,12 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
 
-@app.route('/stream/<path:filename>', methods=['GET', 'POST'])
+@app.route('/stream/<filename>', methods=['GET', 'POST'])
 def stream(filename):
+    print('root path : ' + app.root_path)
     uploads = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'])
+    print('uploaded path : ' + str(uploads))
+    print('filename : ' + filename)
     return send_from_directory(directory=uploads, filename=filename)
 
 
@@ -69,6 +72,19 @@ def realtime():
 
 
 # ======================================================================================================================
+# 다양한 다음 단계 설명 유도 문장들
+next_step_invoke = ['아리아, [요리왕]에서 다음 안내 들려줘',
+                    '아리아, [요리왕]에서 다음 차례는 뭐야?',
+                    '아리아, [요리왕]에서 다음엔 뭘 하면 될까?',
+                    '아리아, [요리왕]에서 다음에 뭐해?']
+
+
+# 레시피 설명 후에 나올 수 있는 액션들
+possible_action_after_recipe = []
+# 레시피 설명 전에 나올 수 있는 액션들
+possible_action_before_recipe = ['answer.confirm_yes', 'answer.confirm_no', 'answer.ask_recipe', 'answer.inform_food_type']
+
+
 
 def check_user(accessToken, response):
     response['resultCode'] = 'OK'
@@ -79,20 +95,23 @@ def check_user(accessToken, response):
             response['resultCode'] = 'error_diff_user'
 
 def update_info_json_file(accessToken, action_name, current_recipe_step):
+    # 사용자의 accessToken과 레시피 step을 info.json 파일에 저장.
+    # 이용하던 기존 사용자가 맞는지 확인, 몇번째 레시피 step인지 확인하기 위함.
+    # before_action은 현재 action의 전 action이 무엇이었는지 확인하기 위함. (context 순서 확인용)
     with open('./info.json', 'w', encoding='utf-8') as f:
         info = {}
         info['accessToken'] = accessToken
         # 다음 action 입장에선 지금 이 action이 전 단계의 action이기 때문에 before_action 이라고 명칭.
         info['before_action'] = action_name
-        info['recipe_step'] = current_recipe_step + 1
+        info['recipe_step'] = current_recipe_step
         json.dump(info, f, ensure_ascii=False, indent=4)
 
 
+# ======================================================================================================================
 
 
-
-@app.route('/answer.recommend_recipe1', methods=['POST'])
-def recommend_recipe1():
+@app.route('/answer.ask_recipe', methods=['POST'])
+def ask_recipe():
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -103,22 +122,12 @@ def recommend_recipe1():
     except:
         accessToken = 'dev'
 
-    # 사용자의 accessToken과 레시피 step을 info.json 파일에 저장.
-    # 이용하던 기존 사용자가 맞는지 확인, 몇번째 레시피 step인지 확인하기 위함.
-    # before_action은 현재 action의 전 action이 무엇이었는지 확인하기 위함. (context 순서 확인용)
-    with open('./info.json', 'w', encoding='utf-8') as f:
-        info = {}
-        info['accessToken'] = accessToken
-        # 다음 action 입장에선 지금 이 action이 전 단계의 action이기 때문에 before_action 이라고 명칭.
-        info['before_action'] = action_name
-        # recipe step 1로 초기화
-        info['recipe_step'] = 1
-        json.dump(info, f, ensure_ascii=False, indent=4)
-
+    # 레시피 안내 시작전이기 때문에 step은 1로 초기 설정
+    update_info_json_file(accessToken, action_name, 1)
 
 
     output = {}
-    output['fulfillment_recommend_recipe1'] = '한식, 중식, 일식, 양식, 분식 중에 선택해주세요.'
+    output['fulfillment_ask_recipe'] = '한식, 중식, 일식, 양식, 분식 중에 선택해주세요.'
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -128,8 +137,8 @@ def recommend_recipe1():
     return jsonify(response)
 
 
-@app.route('/answer.recommend_recipe2', methods=['POST'])
-def recommend_recipe2():
+@app.route('/answer.inform_food_type', methods=['POST'])
+def inform_food_type():
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -147,18 +156,35 @@ def recommend_recipe2():
     parameters = req['action']['parameters']
 
     # 한식, 중식, 양식, 분식
-    food_kind = parameters['food_kind']['value']
+    food_type = parameters['food_type']['value']
 
     with open('./sample.json', 'r') as f:
         sample = json.load(f)
+
+
+    with open('./info.json', 'w', encoding='utf-8') as f:
+        info = {}
+        info['accessToken'] = accessToken
+        # 다음 action 입장에선 지금 이 action이 전 단계의 action이기 때문에 before_action 이라고 명칭.
+        info['before_action'] = action_name
+        # recipe step 1로 초기화
+        info['recipe_step'] = 1
+        json.dump(info, f, ensure_ascii=False, indent=4)
+
+
+    # 레시피 안내 시작전이기 때문에 step은 1로 초기 설정
+    update_info_json_file(accessToken, action_name, 1)
 
 
     output = {}
     for param in parameters:
         output[param] = parameters[param]['value']
 
-    output['fulfillment_recommend_recipe2'] = '오늘의 ' + food_kind + '는 ' +  sample['food_name'] + '입니다.'
-    output['fulfillment_recommend_recipe2'] += ' 안내를 원하시면 "재료 안내해줘" 라고 말씀해주세요.'
+    #output['fulfillment_inform_food_type'] = '오늘의 ' + food_kind + '는 ' +  sample['food_name'] + '입니다.'
+    #output['fulfillment_inform_food_type'] += ' 안내를 원하시면 "재료 안내해줘" 라고 말씀해주세요.'
+
+    output['fulfillment_food_type'] = food_type
+    output['fulfillment_food_name'] = sample['food_name']
 
     response['version'] = '2.0'
     response['output'] = output
@@ -166,7 +192,7 @@ def recommend_recipe2():
 
     return jsonify(response)
 
-
+'''
 @app.route('/answer.inform_ingredients', methods=['POST'])
 def inform_ingredients():
     response = {}
@@ -202,10 +228,11 @@ def inform_ingredients():
     response['directives'] = None
 
     return jsonify(response)
+'''
 
 
-@app.route('/answer.detail_ingredients', methods=['POST'])
-def detail_ingredients():
+@app.route('/answer.ask_ingredients', methods=['POST'])
+def ask_ingredients():
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     try:
@@ -220,12 +247,17 @@ def detail_ingredients():
     with open('./sample.json', 'r') as f:
         sample = json.load(f)
 
+    # 레시피 안내 시작전이기 때문에 step은 1로 초기 설정
+    update_info_json_file(accessToken, action_name, 1)
+
     output = {}
     for param in parameters:
         output[param] = parameters[param]['value']
 
-    output['fulfillment_detail_ingredients'] = sample['detail_ingredients'] + ' 이 필요합니다.'
-    output['fulfillment_detail_ingredients'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
+
+
+    output['fulfillment_ask_ingredients'] = sample['detail_ingredients'] + ' 이 필요합니다.'
+    output['fulfillment_ask_ingredients'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
 
 
     response['version'] = '2.0'
@@ -235,13 +267,10 @@ def detail_ingredients():
     return jsonify(response)
 
 
-next_step_invoke = ['아리아, [요리왕]에서 다음 안내 들려줘',
-                    '아리아, [요리왕]에서 다음 차례는 뭐야?',
-                    '아리아, [요리왕]에서 다음엔 뭘 하면 될까?',
-                    '아리아, [요리왕]에서 다음에 뭐해?']
 
-@app.route('/answer.first_step_recipe', methods=['POST'])
-def first_step_recipe():
+
+@app.route('/answer.start_recipe', methods=['POST'])
+def start_recipe():
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     try:
@@ -268,9 +297,10 @@ def first_step_recipe():
     rand_num = random.randrange(0, len(next_step_invoke))
 
     # 첫번째 레시피 step 알림
-    output['fulfillment_first_step_recipe'] = sample['recipe'][current_recipe_step] + ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+    output['fulfillment_start_recipe'] = sample['recipe'][current_recipe_step] + ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
 
-    update_info_json_file(accessToken, action_name, current_recipe_step)
+    # 다음 단계로 넘어가니까 step + 1
+    update_info_json_file(accessToken, action_name, current_recipe_step + 1)
 
 
     response['version'] = '2.0'
@@ -282,8 +312,8 @@ def first_step_recipe():
 
 
 
-@app.route('/answer.next_step_recipe', methods=['POST'])
-def next_step_recipe():
+@app.route('/answer.next', methods=['POST'])
+def next():
     response = {}
     req = json.loads(request.data.decode('utf-8'))
 
@@ -310,19 +340,19 @@ def next_step_recipe():
     for param in parameters:
         output[param] = parameters[param]['value']
 
-    output['fulfillment_next_step_recipe'] = sample['recipe'][current_recipe_step]
+    output['fulfillment_next'] = sample['recipe'][current_recipe_step]
 
     # step 1 증가 후 info.json에 입력
-    update_info_json_file(accessToken, action_name, current_recipe_step)
+    update_info_json_file(accessToken, action_name, current_recipe_step + 1)
 
     # 다음 단계 예상 발화 랜덤 발생
     rand_num = random.randrange(0, len(next_step_invoke))
 
     # 마지막 recipe step 이라면
     if current_recipe_step + 1 == len(sample['recipe']):
-        output['fulfillment_next_step_recipe'] += ' 이것이 요리의 마지막 안내입니다. 다시들으시려면 "아리아, [요리왕] 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
+        output['fulfillment_next'] += ' 이것이 요리의 마지막 안내입니다. 다시들으시려면 "아리아, [요리왕] 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
     else:
-        output['fulfillment_next_step_recipe'] += ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+        output['fulfillment_next'] += ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
 
     response['version'] = '2.0'
     response['output'] = output
@@ -331,7 +361,7 @@ def next_step_recipe():
 
     return jsonify(response)
 
-
+'''
 @app.route('/answer.explain_ingredients_again', methods=['POST'])
 def explain_ingredients_again():
     response = {}
@@ -378,10 +408,10 @@ def explain_ingredients_again():
     response['directives'] = None
 
     return jsonify(response)
+'''
 
-
-@app.route('/answer.recent_step_recipe', methods=['POST'])
-def recent_step_recipe():
+@app.route('/answer.repeat', methods=['POST'])
+def repeat():
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     try:
@@ -395,11 +425,12 @@ def recent_step_recipe():
 
     check_user(accessToken, response)
 
+
+
     with open('./info.json', 'r') as f:
         info = json.load(f)
         current_recipe_step = info['recipe_step']
-        # 방금 전 단계를 가리키기 위해 -1
-        current_recipe_step -= 1
+
 
 
     with open('./sample.json', 'r') as f:
@@ -410,10 +441,15 @@ def recent_step_recipe():
         output[param] = parameters[param]['value']
 
 
+    update_info_json_file(accessToken, action_name, current_recipe_step)
+
+    # 방금 전 단계를 가리키기 위해 -1
+    current_recipe_step -= 1
+
     # 다음 단계 예상 발화 랜덤 발생
     rand_num = random.randrange(0, len(next_step_invoke))
 
-    output['fulfillment_recent_step_recipe'] = sample['recipe'][current_recipe_step] + ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+    output['fulfillment_repeat'] = sample['recipe'][current_recipe_step] + ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
 
 
     response['version'] = '2.0'
@@ -422,6 +458,122 @@ def recent_step_recipe():
 
     return jsonify(response)
 
+
+@app.route('/answer.start', methods=['POST'])
+def start():
+    response = {}
+    req = json.loads(request.data.decode('utf-8'))
+    try:
+        accessToken = req['context']['session']['accessToken']
+    except:
+        accessToken = 'dev'
+    action_name = req['action']['actionName']
+    parameters = req['action']['parameters']
+
+    check_user(accessToken, response)
+
+    with open('./info.json', 'r') as f:
+        info = json.load(f)
+        # start intent로 들어오기 전에 무슨 action이었는지 확인
+        before_action = info['before_action']
+
+    output = {}
+    for param in parameters:
+        output[param] = parameters[param]['value']
+
+    # 레시피 설명하기 전 처음으로 가고자 할 경우
+    if before_action in possible_action_before_recipe:
+        output['fulfillment_start'] = '한식, 중식, 일식, 양식, 분식 중에 선택해주세요.'
+    # 레시피 설명 도중 처음으로 가고자 할 경우
+    else:
+        output['fulfillment_start'] = '다른 레시피를 추천해드릴까요? "응" 또는 "아니" 로 말씀해주세요.'
+
+    update_info_json_file(accessToken, action_name, 1)
+
+    response['version'] = '2.0'
+    response['output'] = output
+    response['directives'] = None
+
+    return jsonify(response)
+
+
+@app.route('/answer.confirm_yes', methods=['POST'])
+def confirm_yes():
+    response = {}
+    req = json.loads(request.data.decode('utf-8'))
+    try:
+        accessToken = req['context']['session']['accessToken']
+    except:
+        accessToken = 'dev'
+    action_name = req['action']['actionName']
+    parameters = req['action']['parameters']
+
+    check_user(accessToken, response)
+
+    with open('./info.json', 'r') as f:
+        info = json.load(f)
+        # confirm_yes intent로 들어오기 전에 무슨 action이었는지 확인
+        before_action = info['before_action']
+
+    output = {}
+    for param in parameters:
+        output[param] = parameters[param]['value']
+
+
+    if before_action == 'answer.start':
+        output['fulfillment_confirm_yes'] = '한식, 중식, 일식, 양식, 분식 중에 선택해주세요.'
+
+
+    update_info_json_file(accessToken, action_name, 1)
+
+    response['version'] = '2.0'
+    response['output'] = output
+    response['directives'] = None
+
+    return jsonify(response)
+
+
+@app.route('/answer.confirm_no', methods=['POST'])
+def confirm_no():
+    response = {}
+    req = json.loads(request.data.decode('utf-8'))
+    try:
+        accessToken = req['context']['session']['accessToken']
+    except:
+        accessToken = 'dev'
+    action_name = req['action']['actionName']
+    parameters = req['action']['parameters']
+
+    check_user(accessToken, response)
+
+    with open('./info.json', 'r') as f:
+        info = json.load(f)
+        # confirm_no intent로 들어오기 전에 무슨 action이었는지 확인
+        before_action = info['before_action']
+
+    with open('./sample.json', 'r') as f:
+        sample = json.load(f)
+
+    output = {}
+    for param in parameters:
+        output[param] = parameters[param]['value']
+
+
+    if before_action == 'answer.start':
+        # 다음 단계 예상 발화 랜덤 발생
+        rand_num = random.randrange(0, len(next_step_invoke))
+        current_recipe_step = 1
+        output['fulfillment_confirm_no'] = '그럼 현재 레시피를 처음 단계부터 다시 알려드릴게요. ' + sample['recipe'][current_recipe_step]
+        output['fulfillment_confirm_no'] += ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+
+
+    update_info_json_file(accessToken, action_name, current_recipe_step + 1)
+
+    response['version'] = '2.0'
+    response['output'] = output
+    response['directives'] = None
+
+    return jsonify(response)
 
 # ======================================================================================================================
 
