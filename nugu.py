@@ -7,6 +7,7 @@ import google.oauth2.credentials
 from google.auth.transport.requests import AuthorizedSession
 import smtplib
 from email.mime.text import MIMEText
+import urllib.parse
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -104,9 +105,14 @@ def check_user(accessToken):
     # 기존에 user_info.json에 등록되지 않은 access token 이라면  "1. 새로운 사용자" (또는) "2. 기존 사용자의 access token 만료" 두가지 경우
     if is_exist_access_token == 0:
         user_email = get_user_email(accessToken)
-        for each_user_info in user_info:
+        for i,each_user_info in enumerate(user_info):
             # 기존에 등록되어 있던 이메일 이면 기존 사용자
             if each_user_info['user_email'] == user_email:
+                # 기존에 등록되어 있던 사용자의 access token refresh
+                user_info[i]['accessToken'] = accessToken
+                # user_info.json 파일 업데이트
+                with open('./user_info.json', 'w', encoding='utf-8') as f:
+                    json.dump(user_info, f, ensure_ascii=False, indent=4)
                 is_new_user = 0
                 break
             else:
@@ -134,7 +140,7 @@ def update_user_info_json_file(accessToken, action_name, current_recipe_step, se
             user_info = json.load(f)
             for each_user_info in user_info:
                 if each_user_info['accessToken'] == accessToken:
-                    user_email = user_info['user_email']
+                    user_email = each_user_info['user_email']
         except:
             user_email = None
 
@@ -238,33 +244,65 @@ def send_gmail_to_user(accessToken, selected_recipe, action_name, current_recipe
     google_server.login('rladuddls9390@gmail.com', 'wtpx ksqx seof xuii')
 
 
-    email_content = '요리 이름 : ' + selected_recipe['food_name']
-    email_content += '\n\n요리 재료 : ' + selected_recipe['ingredients']
-    email_content += '\n\n요리 예상 시간 : ' + selected_recipe['cook_time']
-    email_content += '\n\n요리 레시피 : '
+    recipe_steps = ''
     for step in selected_recipe['recipe']:
-        email_content += step + '\n'
+        if step == "":
+            continue
+        recipe_steps += step + '<br><br>'
 
-    msg = MIMEText(email_content)
+
+    html_content = """
+    <html>
+        <head></head>
+        <body>
+            <b>요리 이름 :</b> {}
+            <br><br>
+            <b>요리 재료 :</b> {}
+            <br><br>
+            <b>요리 예상 시간 :</b> {}
+            <br><br>
+            <b>요리 레시피</b>
+            <blockquote style="border:6px; border-style:solid; border-color:#adff3a; border-radius: 20px 20px 20px 20px; padding: 1em;">
+            {}
+            </blockquote>
+            <br>
+            <b>요리 이미지</b>
+            <blockquote>
+            <img src={}>
+            </blockquote>
+            <br><br>
+            <b>보다 더 자세한 설명을 보고싶으시다면 ☞ {}</b>
+        </body>
+    </html>
+    """.format(selected_recipe['food_name'], selected_recipe['ingredients'], selected_recipe['cook_time'], recipe_steps, selected_recipe['img_src'],selected_recipe['url'])
+
+    msg = MIMEText(html_content, 'html')
     msg['Subject'] = '요청하신 "' + selected_recipe['food_name'] + '" 요리 정보 입니다.'
     msg['From'] = 'rladuddls9390@gmail.com'
     msg['To'] = user_email
 
-    google_server.sendmail('rladuddls9390@gmail.com', user_email, msg.as_string())
-    google_server.quit()
+    try:
+        google_server.sendmail('rladuddls9390@gmail.com', user_email, msg.as_string())
+        google_server.quit()
+    except:
+        print('Could not send mail')
 
 
 def enable_music_play(response):
     AudioPlayer = {}
     AudioPlayer['type'] = 'AudioPlayer.Play'
+    #AudioPlayer['playBehavior'] = 'REPLACE_ALL'
 
     audioItem = {}
     stream = {}
 
+    music_path = './music'
+    music_list = os.listdir(music_path)
+    rand_num = random.randrange(0, len(music_list))
 
-    rand_num = random.randrange(1, 14)
+    encoded_music_title = urllib.parse.quote_plus(music_list[rand_num])
 
-    stream['url'] = 'http://163.239.169.54:5001/stream/music1.mp3'
+    stream['url'] = 'http://163.239.169.54:5001/stream/' + encoded_music_title
     # 노래 재생 시작지점 '0'이면 처음부터
     stream['offsetInMilliseconds'] = 0
 
@@ -274,6 +312,7 @@ def enable_music_play(response):
     progressReport['progressReportIntervalInMilliseconds'] = 0
     stream['progressReport'] = progressReport
     '''
+
     stream['progressReport'] = None
 
     stream['token'] = 'something'
@@ -395,6 +434,7 @@ def ask_ingredients():
             if each_user_info['accessToken'] == accessToken:
                 current_recipe_step = each_user_info['recipe_step']
                 selected_recipe = each_user_info['selected_recipe']
+                break
 
 
 
@@ -405,8 +445,8 @@ def ask_ingredients():
     # 레시피 설명 시작 전
     if current_recipe_step == 0:
         output['fulfillment_ask_ingredients'] = selected_recipe['ingredients'] + ' 이 필요합니다.'
-        output['fulfillment_ask_ingredients'] += ' 레시피 상세 안내를 이메일로도 전송해 드릴 수 있어요. 이메일로 받아보시려면 누구앱에서 구글 계정을 연동하세요.'
-        output['fulfillment_ask_ingredients'] += ' 이메일로 받아보시겠어요? "응" 또는 "아니" 로 말씀해주세요.'
+        output['fulfillment_ask_ingredients'] += ' 레시피 상세 안내를 이메일 로도 전송해 드릴 수 있어요. 이메일로 받아보시려면 NUGU 앱에서 구글 계정을 연동하세요.'
+        output['fulfillment_ask_ingredients'] += ' 이메일로 받아보시겠어요? "응 해줘" 또는 "아니 괜찮아" 로 말씀해주세요.'
 
         # 레시피 안내 시작전이기 때문에 step은 0으로 초기 설정
         update_user_info_json_file(accessToken, action_name, 0, selected_recipe)
@@ -452,6 +492,7 @@ def start_recipe():
         for each_user_info in user_info:
             if each_user_info['accessToken'] == accessToken:
                 selected_recipe = each_user_info['selected_recipe']
+                break
 
 
     output = {}
@@ -467,11 +508,13 @@ def start_recipe():
     # 다음 단계로 넘어가니까 step + 1
     update_user_info_json_file(accessToken, action_name, current_recipe_step + 1, selected_recipe)
 
+    # 랜덤 음악 재생
+    enable_music_play(response)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
     response['output'] = output
-    response['directives'] = None
+    #response['directives'] = None
 
     return jsonify(response)
 
@@ -499,6 +542,7 @@ def next():
             if each_user_info['accessToken'] == accessToken:
                 current_recipe_step = each_user_info['recipe_step']
                 selected_recipe = each_user_info['selected_recipe']
+                break
 
 
     output = {}
@@ -522,11 +566,15 @@ def next():
         output['fulfillment_next'] += ' 이것이 요리의 마지막 안내입니다. 다시들으시려면 "아리아, [요리왕] 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
     else:
         output['fulfillment_next'] += ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+        # 랜덤 음악 재생
+        enable_music_play(response)
+
+
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
     response['output'] = output
-    response['directives'] = None
+    #response['directives'] = None
 
 
     return jsonify(response)
@@ -555,6 +603,7 @@ def repeat():
             if each_user_info['accessToken'] == accessToken:
                 current_recipe_step = each_user_info['recipe_step']
                 selected_recipe = each_user_info['selected_recipe']
+                break
 
 
     output = {}
@@ -572,6 +621,8 @@ def repeat():
 
     try:
         output['fulfillment_repeat'] = selected_recipe['recipe'][current_recipe_step] + ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+        # 랜덤 음악 재생
+        enable_music_play(response)
     except IndexError:
         output['fulfillment_repeat'] = '이것이 요리의 마지막 안내입니다. 다시들으시려면 "아리아, [요리왕] 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
 
@@ -579,7 +630,7 @@ def repeat():
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
     response['output'] = output
-    response['directives'] = None
+    #response['directives'] = None
 
     return jsonify(response)
 
@@ -603,6 +654,7 @@ def start():
             if each_user_info['accessToken'] == accessToken:
                 current_recipe_step = each_user_info['recipe_step']
                 selected_recipe = each_user_info['selected_recipe']
+                break
 
     output = {}
     for param in parameters:
@@ -614,7 +666,7 @@ def start():
         update_user_info_json_file(accessToken, action_name, 0, selected_recipe)
     # 레시피 설명 도중 처음으로 가고자 할 경우
     else:
-        output['fulfillment_start'] = '다른 레시피를 추천해드릴까요? "응" 또는 "아니" 로 말씀해주세요.'
+        output['fulfillment_start'] = '다른 레시피를 추천해드릴까요? "응 해줘" 또는 "아니 괜찮아" 로 말씀해주세요.'
         update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe)
 
 
@@ -648,6 +700,7 @@ def confirm_yes():
                 before_action = each_user_info['before_action']
                 current_recipe_step = each_user_info['recipe_step']
                 selected_recipe = each_user_info['selected_recipe']
+                break
 
     output = {}
     for param in parameters:
@@ -661,11 +714,13 @@ def confirm_yes():
         # nugu builder 사용 혹은 계정 미연동
         if accessToken == 'dev':
             output['fulfillment_confirm_yes'] = 'NUGU builder로 테스트 하시거나, NUGU 앱에서 계정 연동을 하지 않으시면 이메일 발송이 불가능합니다.'
+            output['fulfillment_confirm_yes'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 [요리왕]에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
             output['fulfillment_confirm_yes'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
         # nugu app에서 계정 연동
         else:
             send_gmail_to_user(accessToken, selected_recipe, action_name, current_recipe_step)
             output['fulfillment_confirm_yes'] = '레시피를 이메일로 발송하였습니다. 수신함을 확인해 보세요.'
+            output['fulfillment_confirm_yes'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 [요리왕]에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
             output['fulfillment_confirm_yes'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
 
 
@@ -699,6 +754,7 @@ def confirm_no():
                 # confirm_no intent로 들어오기 전에 무슨 action이었는지 확인
                 before_action = each_user_info['before_action']
                 selected_recipe = each_user_info['selected_recipe']
+                break
 
 
     output = {}
@@ -711,7 +767,10 @@ def confirm_no():
         output['fulfillment_confirm_no'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
     # 이메일 전송 안하는 경우
     elif before_action == 'answer.ask_ingredients':
-        output['fulfillment_confirm_no'] = '그럼 바로 레시피 안내를 시작할까요? 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
+        output['fulfillment_confirm_no'] = '그럼 바로 레시피 안내를 시작할게요.'
+        output['fulfillment_confirm_no'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 [요리왕]에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
+        output['fulfillment_confirm_no'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
+
 
 
     update_user_info_json_file(accessToken, action_name, 0, selected_recipe)
@@ -745,6 +804,7 @@ def send_email():
             if each_user_info['accessToken'] == accessToken:
                 current_recipe_step = each_user_info['recipe_step']
                 selected_recipe = each_user_info['selected_recipe']
+                break
 
     output = {}
     for param in parameters:
@@ -754,8 +814,10 @@ def send_email():
     # nugu builder 사용 혹은 계정 미연동
     if accessToken == 'dev':
         output['fulfillment_send_email'] = 'NUGU builder를 사용하시거나, NUGU 앱에서 계정 연동을 하지 않으시면 이메일 발송이 불가능합니다.'
+        output['fulfillment_send_email'] += ' 이메일로 레시피를 받아보시려면, NUGU 앱에서 계정 연동을 하시고 다시 시도해주세요.'
         # 레시피 설명 전
         if current_recipe_step == 0:
+            output['fulfillment_send_email'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 [요리왕]에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
             output['fulfillment_send_email'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
         # 레시피 설명 중
         else:
@@ -765,7 +827,9 @@ def send_email():
         send_gmail_to_user(accessToken, selected_recipe, action_name, current_recipe_step)
         # 레시피 설명하기 전
         if current_recipe_step == 0:
-            output['fulfillment_send_email'] = '레시피를 이메일로 발송하였습니다. 수신함을 확인해보세요. 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
+            output['fulfillment_send_email'] = '레시피를 이메일로 발송하였습니다. 수신함을 확인해보세요.'
+            output['fulfillment_send_email'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 [요리왕]에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
+            output['fulfillment_send_email'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
             update_user_info_json_file(accessToken, action_name, 0, selected_recipe)
         # 레시피 설명중
         else:
@@ -782,6 +846,87 @@ def send_email():
 
     return jsonify(response)
 
+'''
+@app.route('/answer.music_stop', methods=['POST'])
+def music_stop():
+    response = {}
+
+    response['version'] = '2.0'
+    response['resultCode'] = 'OK'
+    response['output'] = {}
+
+    AudioPlayer = {}
+    AudioPlayer['type'] = 'AudioPlayer.Stop'
+    # AudioPlayer['playBehavior'] = 'REPLACE_ALL'
+    
+    audioItem = {}
+    stream = {}
+
+    music_path = './music'
+    music_list = os.listdir(music_path)
+    rand_num = random.randrange(0, len(music_list))
+
+    encoded_music_title = urllib.parse.quote_plus(music_list[rand_num])
+
+    stream['url'] = 'http://163.239.169.54:5001/stream/' + encoded_music_title
+    # 노래 재생 시작지점 '0'이면 처음부터
+    stream['offsetInMilliseconds'] = 0
+
+    stream['progressReport'] = None
+
+    stream['token'] = 'something'
+    stream['expectedPreviousToken'] = 'something'
+
+    audioItem['stream'] = stream
+    audioItem['metadata'] = None
+
+    AudioPlayer['audioItem'] = audioItem
+    
+
+    response['directives'] = [AudioPlayer]
+
+    return jsonify(response)
+
+@app.route('/answer.music_stop2', methods=['POST'])
+def music_stop2():
+    response = {}
+
+    response['version'] = '2.0'
+    response['resultCode'] = 'please_stop'
+    response['output'] = {}
+
+    AudioPlayer = {}
+    AudioPlayer['type'] = 'AudioPlayer.Stop'
+    # AudioPlayer['playBehavior'] = 'REPLACE_ALL'
+    
+    audioItem = {}
+    stream = {}
+
+    music_path = './music'
+    music_list = os.listdir(music_path)
+    rand_num = random.randrange(0, len(music_list))
+
+    encoded_music_title = urllib.parse.quote_plus(music_list[rand_num])
+
+    stream['url'] = 'http://163.239.169.54:5001/stream/' + encoded_music_title
+    # 노래 재생 시작지점 '0'이면 처음부터
+    stream['offsetInMilliseconds'] = 0
+
+    stream['progressReport'] = None
+
+    stream['token'] = 'something'
+    stream['expectedPreviousToken'] = 'something'
+
+    audioItem['stream'] = stream
+    audioItem['metadata'] = None
+
+    AudioPlayer['audioItem'] = audioItem
+    
+
+    response['directives'] = [AudioPlayer]
+
+    return jsonify(response)
+'''
 # ======================================================================================================================
 
 
