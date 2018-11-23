@@ -8,6 +8,7 @@ from google.auth.transport.requests import AuthorizedSession
 import smtplib
 from email.mime.text import MIMEText
 import urllib.parse
+import threading
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -28,64 +29,20 @@ def stream(filename):
 
 
 
-@app.route('/answer.realtime_search', methods=['POST'])
-def realtime():
-    req = json.loads(request.data.decode('utf-8'))
-
-    output = {}
-
-    response = {}
-    response['version'] = '2.0'
-    response['resultCode'] = 'OK'
-    response['output'] = output
-
-
-    AudioPlayer = {}
-    AudioPlayer['type'] = 'AudioPlayer.Play'
-
-    audioItem = {}
-    stream = {}
-    stream['url'] = 'http://163.239.169.54:5001/stream/music1.mp3'
-    # 노래 재생 시작지점 '0'이면 처음부터
-    stream['offsetInMilliseconds'] = 0
-
-    '''
-    progressReport = {}
-    progressReport['progressReportDelayInMilliseconds'] = 0
-    progressReport['progressReportIntervalInMilliseconds'] = 0
-    stream['progressReport'] = progressReport
-    '''
-    stream['progressReport'] = None
-
-    stream['token'] = 'something'
-    stream['expectedPreviousToken'] = 'something'
-
-    audioItem['stream'] = stream
-    audioItem['metadata'] = None
-
-    AudioPlayer['audioItem'] = audioItem
-
-
-    response['directives'] = [AudioPlayer]
-
-    print(json.dumps(response, indent=4))
-
-    return jsonify(response)
-
-
 
 # ======================================================================================================================
 # 다양한 다음 단계 설명 유도 문장들
-next_step_invoke = ['아리아, [요리왕]에서 다음 안내 들려줘',
-                    '아리아, [요리왕]에서 다음 차례는 뭐야?',
-                    '아리아, [요리왕]에서 다음엔 뭘 하면 될까?',
-                    '아리아, [요리왕]에서 다음에 뭐해?']
+next_step_invoke = ['아리아, [요리왕]에서 "다음 안내 들려줘"',
+                    '아리아, [요리왕]에서 "다음 차례는 뭐야?"',
+                    '아리아, [요리왕]에서 "다음엔 뭘 하면 될까?"',
+                    '아리아, [요리왕]에서 "다음에 뭐해?"']
 
+# 다양한 이전 단계 설명 유도 문장들
+prev_step_invoke = ['아리아, [요리왕]에서 "이전 단계 들려줘"',
+                    '아리아, [요리왕]에서 "이전 차례 알려줘"',
+                    '아리아, [요리왕]에서 "이전 단계는 뭐였지"',
+                    '아리아, [요리왕]에서 "이전 설명 말해줘"']
 
-# 레시피 설명 후에 나올 수 있는 액션들
-possible_action_after_recipe = []
-# 레시피 설명 전에 나올 수 있는 액션들
-possible_action_before_recipe = ['answer.confirm_yes', 'answer.confirm_no', 'answer.ask_recipe', 'answer.inform_food_type']
 
 
 # 새로운 사용자인지 확인. 새로운 사용자면 info_user.json에 등록
@@ -154,6 +111,11 @@ def update_user_info_json_file(accessToken, action_name, current_recipe_step, se
                 temp = {}
                 temp['accessToken'] = accessToken
                 temp['before_action'] = action_name
+                try:
+                    # 전 전 action
+                    temp['bef_bef_action'] = each_user_info['before_action']
+                except:
+                    temp['bef_bef_action'] = ''
                 temp['selected_recipe'] = selected_recipe
                 temp['recipe_step'] = current_recipe_step
                 temp['user_email'] = user_email
@@ -306,6 +268,8 @@ def enable_music_play(response):
     with open('./recently_played_music.json', 'w', encoding='utf-8') as f:
         # url에 입력하기 위해 변경했던 '_' 를 다시 공백으로 변경해준다
         music_title = music_title.replace('_', ' ')
+        # .mp3 부분 제거
+        music_title = music_title.replace('.mp3', '')
         music_info = {}
         music_info['music_title'] = music_title
         json.dump(music_info, f, ensure_ascii=False, indent=4)
@@ -334,6 +298,10 @@ def enable_music_play(response):
     response['directives'] = [AudioPlayer]
 
     return response
+
+
+
+
 
 # ======================================================================================================================
 
@@ -389,6 +357,13 @@ def inform_food_type():
 
     # 한식, 중식, 일식, 양식, 분식
     food_type = parameters['food_type']['value']
+
+
+    if food_type == '아무거나':
+        temp = ['한식', '중식', '일식', '양식', '분식']
+        rand_num = random.randrange(0, len(temp))
+        food_type = temp[rand_num]
+
 
     with open('./recipes.json', 'r') as f:
         recipes = json.load(f)
@@ -453,8 +428,12 @@ def ask_ingredients():
     # 레시피 설명 시작 전
     if current_recipe_step == 0:
         output['fulfillment_ask_ingredients'] = selected_recipe['ingredients'] + ' 이 필요합니다.'
-        output['fulfillment_ask_ingredients'] += ' 레시피 상세 안내를 이메일 로도 전송해 드릴 수 있어요. 이메일로 받아보시려면 NUGU 앱에서 구글 계정을 연동하세요.'
-        output['fulfillment_ask_ingredients'] += ' 이메일로 받아보시겠어요? "응 해줘" 또는 "아니 괜찮아" 로 말씀해주세요.'
+        if accessToken == 'dev':
+            output['fulfillment_ask_ingredients'] += ' 레시피 상세 안내를 이메일 로도 전송해 드릴 수도 있어요. 이메일로 받아보시려면 NUGU 앱에서 구글 계정을 연동하세요.'
+            output['fulfillment_ask_ingredients'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 [요리왕]에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
+            output['fulfillment_ask_ingredients'] += ' 레시피 안내를 시작하시려면, "레시피 시작" 이라고 이야기 해 주세요.'
+        else:
+            output['fulfillment_ask_ingredients'] += ' 레시피 상세 안내를 이메일 로도 전송해 드릴 수 있어요. 이메일로 받아보시겠어요? "응 해줘" 또는 "아니 괜찮아" 로 말씀해주세요.'
 
         # 레시피 안내 시작전이기 때문에 step은 0으로 초기 설정
         update_user_info_json_file(accessToken, action_name, 0, selected_recipe)
@@ -511,7 +490,7 @@ def start_recipe():
     rand_num = random.randrange(0, len(next_step_invoke))
 
     # 첫번째 레시피 step 알림
-    output['fulfillment_start_recipe'] = selected_recipe['recipe'][current_recipe_step] + ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+    output['fulfillment_start_recipe'] = selected_recipe['recipe'][current_recipe_step] + ' 다 되시면 먼저 노래를 종료한 뒤에, ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
 
 
     update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe)
@@ -552,7 +531,7 @@ def next():
                 selected_recipe = each_user_info['selected_recipe']
                 break
 
-    # 다음 단계
+    # 한 단계 증가
     current_recipe_step += 1
 
     output = {}
@@ -575,8 +554,7 @@ def next():
     if current_recipe_step >= len(selected_recipe['recipe']):
         output['fulfillment_next'] += ' 이것이 요리의 마지막 안내입니다. 다시들으시려면 "아리아, [요리왕] 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
     else:
-        output['fulfillment_next'] += ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
-        # step 1 증가 후 user_info.json에 입력
+        output['fulfillment_next'] += ' 다 되시면 먼저 노래를 종료한 뒤에, ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
         # 랜덤 음악 재생
         enable_music_play(response)
 
@@ -589,6 +567,71 @@ def next():
 
 
     return jsonify(response)
+
+
+@app.route('/answer.prev', methods=['POST'])
+def prev():
+    response = {}
+    req = json.loads(request.data.decode('utf-8'))
+
+    try:
+        accessToken = req['context']['session']['accessToken']
+    except:
+        # OAuth 를 사용하지 않는 경우
+        accessToken = 'dev'
+
+    action_name = req['action']['actionName']
+    parameters = req['action']['parameters']
+
+    check_user(accessToken)
+
+    with open('./user_info.json', 'r') as f:
+        user_info = json.load(f)
+        for each_user_info in user_info:
+            if each_user_info['accessToken'] == accessToken:
+                current_recipe_step = each_user_info['recipe_step']
+                selected_recipe = each_user_info['selected_recipe']
+                break
+
+    # 한 단계 감소
+    current_recipe_step -= 1
+
+    output = {}
+    for param in parameters:
+        output[param] = parameters[param]['value']
+
+    try:
+        output['fulfillment_prev'] = selected_recipe['recipe'][current_recipe_step]
+    # list index out of range
+    except IndexError:
+        output['fulfillment_prev'] = ''
+
+
+
+
+    # 다음 단계 예상 발화 랜덤 발생
+    rand_num = random.randrange(0, len(prev_step_invoke))
+
+    # 첫 번째 step 전으로 가려고 하면
+    if current_recipe_step <= 0:
+        output['fulfillment_prev'] += '이미 첫번째 단계입니다. ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+        update_user_info_json_file(accessToken, action_name, 1, selected_recipe)
+    else:
+        output['fulfillment_prev'] += ' 다 되시면 먼저 노래를 종료한 뒤에, ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+        # 랜덤 음악 재생
+        enable_music_play(response)
+        update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe)
+
+
+
+    response['version'] = '2.0'
+    response['resultCode'] = 'OK'
+    response['output'] = output
+    #response['directives'] = None
+
+
+    return jsonify(response)
+
 
 
 @app.route('/answer.repeat', methods=['POST'])
@@ -629,7 +672,7 @@ def repeat():
     rand_num = random.randrange(0, len(next_step_invoke))
 
     try:
-        output['fulfillment_repeat'] = selected_recipe['recipe'][current_recipe_step] + ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+        output['fulfillment_repeat'] = selected_recipe['recipe'][current_recipe_step] + ' 다 되시면 먼저 노래를 종료한 뒤에, ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
         # 랜덤 음악 재생
         enable_music_play(response)
     except IndexError:
@@ -727,7 +770,9 @@ def confirm_yes():
             output['fulfillment_confirm_yes'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
         # nugu app에서 계정 연동
         else:
-            send_gmail_to_user(accessToken, selected_recipe, action_name, current_recipe_step)
+            t = threading.Thread(target=send_gmail_to_user, args=(accessToken, selected_recipe, action_name, current_recipe_step))
+            t.start()
+            #send_gmail_to_user(accessToken, selected_recipe, action_name, current_recipe_step)
             output['fulfillment_confirm_yes'] = '레시피를 이메일로 발송하였습니다. 수신함을 확인해 보세요.'
             output['fulfillment_confirm_yes'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 [요리왕]에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
             output['fulfillment_confirm_yes'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
@@ -833,7 +878,9 @@ def send_email():
             output['fulfillment_send_email'] += ' 레시피를 이어서 들으시려면 "다음안내 들려줘" 라고 말씀해주세요.'
     # nugu app에서 계정 연동
     else:
-        send_gmail_to_user(accessToken, selected_recipe, action_name, current_recipe_step)
+        t = threading.Thread(target=send_gmail_to_user,args=(accessToken, selected_recipe, action_name, current_recipe_step))
+        t.start()
+        #send_gmail_to_user(accessToken, selected_recipe, action_name, current_recipe_step)
         # 레시피 설명하기 전
         if current_recipe_step == 0:
             output['fulfillment_send_email'] = '레시피를 이메일로 발송하였습니다. 수신함을 확인해보세요.'
@@ -856,7 +903,7 @@ def send_email():
     return jsonify(response)
 
 
-@app.route('./answer.ask_music', methods=['POST'])
+@app.route('/answer.ask_music', methods=['POST'])
 def ask_music():
     response = {}
     req = json.loads(request.data.decode('utf-8'))
@@ -864,6 +911,7 @@ def ask_music():
         accessToken = req['context']['session']['accessToken']
     except:
         accessToken = 'dev'
+
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
@@ -887,8 +935,9 @@ def ask_music():
         music_info = json.load(f)
         music_title = music_info['music_title']
 
+
     output['fulfillment_ask_music'] = '방금 재생된 음악은 ' + music_title + ' 입니다.'
-    output['fulfillment_ask_music'] += ' 다음 단계로 넘어가시려면 "다음 안내 들려줘" 라고 이야기 해 주세요.'
+    output['fulfillment_ask_music'] += ' 다음 단계로 넘어가시려면 "아리아, [요리왕]에서 다음 안내 들려줘" 라고 이야기 해 주세요.'
 
     update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe)
 
@@ -899,6 +948,156 @@ def ask_music():
 
     return jsonify(response)
 
+
+
+@app.route('/answer.ask_food_name', methods=['POST'])
+def ask_food_name():
+    response = {}
+    req = json.loads(request.data.decode('utf-8'))
+    try:
+        accessToken = req['context']['session']['accessToken']
+    except:
+        accessToken = 'dev'
+
+    action_name = req['action']['actionName']
+    parameters = req['action']['parameters']
+
+    check_user(accessToken)
+
+    with open('./user_info.json', 'r') as f:
+        user_info = json.load(f)
+        for each_user_info in user_info:
+            if each_user_info['accessToken'] == accessToken:
+                selected_recipe = each_user_info['selected_recipe']
+                current_recipe_step = each_user_info['recipe_step']
+                break
+
+    output = {}
+    for param in parameters:
+        output[param] = parameters[param]['value']
+
+
+    output['fulfillment_ask_food_name'] = '지금 만들고 계신 요리는 ' + selected_recipe['food_name'] + ' 입니다.'
+
+
+    update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe)
+
+    response['version'] = '2.0'
+    response['resultCode'] = 'OK'
+    response['output'] = output
+    response['directives'] = None
+
+    return jsonify(response)
+
+
+@app.route('/answer.help', methods=['POST'])
+def help():
+    response = {}
+    req = json.loads(request.data.decode('utf-8'))
+    try:
+        accessToken = req['context']['session']['accessToken']
+    except:
+        accessToken = 'dev'
+
+    action_name = req['action']['actionName']
+    parameters = req['action']['parameters']
+
+    check_user(accessToken)
+
+    with open('./user_info.json', 'r') as f:
+        user_info = json.load(f)
+        for each_user_info in user_info:
+            if each_user_info['accessToken'] == accessToken:
+                selected_recipe = each_user_info['selected_recipe']
+                current_recipe_step = each_user_info['recipe_step']
+                # 전 action
+                before_action = each_user_info['before_action']
+                # 전 전 action
+                bef_bef_action = each_user_info['bef_bef_action']
+                break
+
+    output = {}
+    for param in parameters:
+        output[param] = parameters[param]['value']
+
+
+    if before_action == 'answer.ask_recipe':
+        output['fulfillment_help'] = '"한식 선택" 과 같이 "선택" 이란 단어를 붙여서 말씀해주세요.'
+    elif before_action == 'answer.inform_food_type':
+        output['fulfillment_help'] = '"재료 안내해줘" 라고 이야기 해 보세요.'
+    elif before_action == 'answer.ask_ingredients' and bef_bef_action == 'answer.inform_food_type':
+        output['fulfillment_help'] = '"응, 해줘" 또는 "아니야, 괜찮아" 라고 이야기 해 보세요.'
+    elif before_action == 'answer.ask_ingredients' and (bef_bef_action == 'answer.start_recipe' or bef_bef_action == 'answer.next' or bef_bef_action == 'answer.repeat'):
+        output['fulfillment_help'] = '방금 단계를 다시 들으시려면 "아리아, [요리왕] 에서 방금 안내 다시 들려줘" 라고 이야기 해 주시고, 다음 단계로 넘어가시려면 "아리아, [요리왕] 에서 다음 안내 들려줘" 라고 이야기 해 주세요.'
+    elif before_action == 'answer.start_recipe' or before_action == 'answer.next' or before_action == 'answer.repeat' or before_action == 'answer.prev':
+        output['fulfillment_help'] = '"아리아, 요리왕에서 다음안내 들려줘" 라고 이야기 해보세요. 재료설명을 듣고 싶으시면 "아리아, 요리왕에서 재료 안내해줘" 라고 이야기 해보세요.'
+    elif before_action == 'answer.start' and current_recipe_step == 0:
+        output['fulfillment_help'] = '"한식 선택" 과 같이 "선택" 이란 단어를 붙여서 말씀해주세요.'
+    elif before_action == 'answer.start' and current_recipe_step > 0:
+        output['fulfillment_help'] = '"응, 해줘" 또는 "아니야, 괜찮아" 라고 이야기 해 보세요.'
+    elif before_action == 'answer.confirm_yes' and bef_bef_action == 'answer.start':
+        output['fulfillment_help'] = '"한식 선택" 과 같이 "선택" 이란 단어를 붙여서 말씀해주세요.'
+    elif before_action == 'answer.confirm_yes' and bef_bef_action == 'answer.ask_ingredients':
+        output['fulfillment_help'] = '"레시피 시작" 이라고 이야기 해 보세요.'
+    elif before_action == 'answer.confirm_no' or before_action == 'answer.ask_food_name':
+        output['fulfillment_help'] = '"레시피 시작" 이라고 이야기 해 보세요.'
+    elif before_action == 'answer.send_email' or before_action == 'answer.ask_music':
+        output['fulfillment_help'] = '"다음 안내 들려줘" 라고 이야기 해 보세요.'
+    else:
+        output['fulfillment_help'] = '"추천 레시피 알려줘" 라고 이야기 해 보세요.'
+
+
+
+    update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe)
+
+    response['version'] = '2.0'
+    response['resultCode'] = 'OK'
+    response['output'] = output
+    response['directives'] = None
+
+    return jsonify(response)
+
+
+@app.route('/answer.tutorial', methods=['POST'])
+def tutorial():
+    response = {}
+    req = json.loads(request.data.decode('utf-8'))
+    try:
+        accessToken = req['context']['session']['accessToken']
+    except:
+        accessToken = 'dev'
+
+    action_name = req['action']['actionName']
+    parameters = req['action']['parameters']
+
+    check_user(accessToken)
+
+    with open('./user_info.json', 'r') as f:
+        user_info = json.load(f)
+        for each_user_info in user_info:
+            if each_user_info['accessToken'] == accessToken:
+                selected_recipe = each_user_info['selected_recipe']
+                current_recipe_step = each_user_info['recipe_step']
+                break
+
+    output = {}
+    for param in parameters:
+        output[param] = parameters[param]['value']
+
+    output['fulfillment_tutorial'] = '요리왕에서 할 수 있는 것을 알려드립니다. 처음부터 들으시려면 "처음부터 안내해줘"라고, 재료안내를 원하시면 "재료 안내해줘" 라고 말해보세요.'
+    output['fulfillment_tutorial'] += ' 그 외, 부가기능도 있습니다.'
+    output['fulfillment_tutorial'] += ' 이메일로 레시피를 받으시려면 "이메일로 레시피 보내줘", 노래 제목이 궁금하시면 "방금 재생된 음악 알려줘" 라고 말해보세요.'
+    output['fulfillment_tutorial'] += ' 다시들으시려면 "사용법 알려줘"라고, 시작하시려면 "요리왕 시작해줘" 라고 말씀하세요.'
+
+
+    update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe)
+
+    response['version'] = '2.0'
+    response['resultCode'] = 'OK'
+    response['output'] = output
+    response['directives'] = None
+
+    return jsonify(response)
 # ======================================================================================================================
 
 
@@ -918,4 +1117,4 @@ def health_check():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True, threaded=True)
