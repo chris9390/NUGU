@@ -300,7 +300,15 @@ def enable_music_play(response):
     music_list = os.listdir(music_path)
     rand_num = random.randrange(0, len(music_list))
 
-    encoded_music_title = urllib.parse.quote_plus(music_list[rand_num])
+    music_title = music_list[rand_num]
+    encoded_music_title = urllib.parse.quote_plus(music_title)
+
+    with open('./recently_played_music.json', 'w', encoding='utf-8') as f:
+        # url에 입력하기 위해 변경했던 '_' 를 다시 공백으로 변경해준다
+        music_title = music_title.replace('_', ' ')
+        music_info = {}
+        music_info['music_title'] = music_title
+        json.dump(music_info, f, ensure_ascii=False, indent=4)
 
     stream['url'] = 'http://163.239.169.54:5001/stream/' + encoded_music_title
     # 노래 재생 시작지점 '0'이면 처음부터
@@ -453,7 +461,7 @@ def ask_ingredients():
     # 레시피 설명 도중
     else:
         output['fulfillment_ask_ingredients'] = selected_recipe['ingredients'] + ' 입니다.'
-        output['fulfillment_ask_ingredients'] += ' 현재 단계를 다시 들으시려면 "아리아, [요리왕]에서 방금 안내 다시 들려줘" 라고 이야기 해 주시고,'
+        output['fulfillment_ask_ingredients'] += ' 방금 단계를 다시 들으시려면 "아리아, [요리왕]에서 방금 안내 다시 들려줘" 라고 이야기 해 주시고,'
         output['fulfillment_ask_ingredients'] += ' 다음 단계로 넘어가시려면 "아리아, [요리왕]에서 다음 안내 들려줘" 라고 이야기 해 주세요.'
 
         update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe)
@@ -505,8 +513,8 @@ def start_recipe():
     # 첫번째 레시피 step 알림
     output['fulfillment_start_recipe'] = selected_recipe['recipe'][current_recipe_step] + ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
 
-    # 다음 단계로 넘어가니까 step + 1
-    update_user_info_json_file(accessToken, action_name, current_recipe_step + 1, selected_recipe)
+
+    update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe)
 
     # 랜덤 음악 재생
     enable_music_play(response)
@@ -544,6 +552,8 @@ def next():
                 selected_recipe = each_user_info['selected_recipe']
                 break
 
+    # 다음 단계
+    current_recipe_step += 1
 
     output = {}
     for param in parameters:
@@ -555,21 +565,22 @@ def next():
     except IndexError:
         output['fulfillment_next'] = ''
 
-    # step 1 증가 후 user_info.json에 입력
-    update_user_info_json_file(accessToken, action_name, current_recipe_step + 1, selected_recipe)
+
+
 
     # 다음 단계 예상 발화 랜덤 발생
     rand_num = random.randrange(0, len(next_step_invoke))
 
     # 마지막 recipe step 이라면
-    if current_recipe_step + 1 >= len(selected_recipe['recipe']):
+    if current_recipe_step >= len(selected_recipe['recipe']):
         output['fulfillment_next'] += ' 이것이 요리의 마지막 안내입니다. 다시들으시려면 "아리아, [요리왕] 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
     else:
         output['fulfillment_next'] += ' 다 되시면 ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+        # step 1 증가 후 user_info.json에 입력
         # 랜덤 음악 재생
         enable_music_play(response)
 
-
+    update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -613,8 +624,6 @@ def repeat():
 
     update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe)
 
-    # 방금 전 단계를 가리키기 위해 -1
-    current_recipe_step -= 1
 
     # 다음 단계 예상 발화 랜덤 발생
     rand_num = random.randrange(0, len(next_step_invoke))
@@ -624,7 +633,7 @@ def repeat():
         # 랜덤 음악 재생
         enable_music_play(response)
     except IndexError:
-        output['fulfillment_repeat'] = '이것이 요리의 마지막 안내입니다. 다시들으시려면 "아리아, [요리왕] 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
+        output['fulfillment_repeat'] = '이것이 요리의 마지막 안내입니다. 다시 들으시려면 "아리아, [요리왕] 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
 
 
     response['version'] = '2.0'
@@ -846,87 +855,50 @@ def send_email():
 
     return jsonify(response)
 
-'''
-@app.route('/answer.music_stop', methods=['POST'])
-def music_stop():
+
+@app.route('./answer.ask_music', methods=['POST'])
+def ask_music():
     response = {}
+    req = json.loads(request.data.decode('utf-8'))
+    try:
+        accessToken = req['context']['session']['accessToken']
+    except:
+        accessToken = 'dev'
+    action_name = req['action']['actionName']
+    parameters = req['action']['parameters']
+
+    check_user(accessToken)
+
+    with open('./user_info.json', 'r') as f:
+        user_info = json.load(f)
+        for each_user_info in user_info:
+            if each_user_info['accessToken'] == accessToken:
+                # confirm_no intent로 들어오기 전에 무슨 action이었는지 확인
+                before_action = each_user_info['before_action']
+                selected_recipe = each_user_info['selected_recipe']
+                current_recipe_step = each_user_info['recipe_step']
+                break
+
+    output = {}
+    for param in parameters:
+        output[param] = parameters[param]['value']
+
+    with open('./recently_played_music.json', 'r') as f:
+        music_info = json.load(f)
+        music_title = music_info['music_title']
+
+    output['fulfillment_ask_music'] = '방금 재생된 음악은 ' + music_title + ' 입니다.'
+    output['fulfillment_ask_music'] += ' 다음 단계로 넘어가시려면 "다음 안내 들려줘" 라고 이야기 해 주세요.'
+
+    update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
-    response['output'] = {}
-
-    AudioPlayer = {}
-    AudioPlayer['type'] = 'AudioPlayer.Stop'
-    # AudioPlayer['playBehavior'] = 'REPLACE_ALL'
-    
-    audioItem = {}
-    stream = {}
-
-    music_path = './music'
-    music_list = os.listdir(music_path)
-    rand_num = random.randrange(0, len(music_list))
-
-    encoded_music_title = urllib.parse.quote_plus(music_list[rand_num])
-
-    stream['url'] = 'http://163.239.169.54:5001/stream/' + encoded_music_title
-    # 노래 재생 시작지점 '0'이면 처음부터
-    stream['offsetInMilliseconds'] = 0
-
-    stream['progressReport'] = None
-
-    stream['token'] = 'something'
-    stream['expectedPreviousToken'] = 'something'
-
-    audioItem['stream'] = stream
-    audioItem['metadata'] = None
-
-    AudioPlayer['audioItem'] = audioItem
-    
-
-    response['directives'] = [AudioPlayer]
+    response['output'] = output
+    response['directives'] = None
 
     return jsonify(response)
 
-@app.route('/answer.music_stop2', methods=['POST'])
-def music_stop2():
-    response = {}
-
-    response['version'] = '2.0'
-    response['resultCode'] = 'please_stop'
-    response['output'] = {}
-
-    AudioPlayer = {}
-    AudioPlayer['type'] = 'AudioPlayer.Stop'
-    # AudioPlayer['playBehavior'] = 'REPLACE_ALL'
-    
-    audioItem = {}
-    stream = {}
-
-    music_path = './music'
-    music_list = os.listdir(music_path)
-    rand_num = random.randrange(0, len(music_list))
-
-    encoded_music_title = urllib.parse.quote_plus(music_list[rand_num])
-
-    stream['url'] = 'http://163.239.169.54:5001/stream/' + encoded_music_title
-    # 노래 재생 시작지점 '0'이면 처음부터
-    stream['offsetInMilliseconds'] = 0
-
-    stream['progressReport'] = None
-
-    stream['token'] = 'something'
-    stream['expectedPreviousToken'] = 'something'
-
-    audioItem['stream'] = stream
-    audioItem['metadata'] = None
-
-    AudioPlayer['audioItem'] = audioItem
-    
-
-    response['directives'] = [AudioPlayer]
-
-    return jsonify(response)
-'''
 # ======================================================================================================================
 
 
