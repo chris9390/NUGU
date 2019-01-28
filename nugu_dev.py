@@ -18,9 +18,7 @@ app.secret_key = os.urandom(24)
 UPLOAD_FOLDER = 'music'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-mylogger = logging.getLogger('my')
-mylogger.setLevel(logging.INFO)
-formatter = logging.Formatter('[%(asctime)s | %(levelname)s] %(message)s')
+
 
 
 @app.route('/stream/<filename>', methods=['GET'])
@@ -118,14 +116,29 @@ def check_user(accessToken):
     if user_email == None:
         user_email = 'oauth_unconnected_users'
 
+
+    mylogger = logging.getLogger(user_email)
+
+    if len(mylogger.handlers) > 0:
+        return mylogger
+
+    mylogger.setLevel(logging.INFO)
+    formatter = logging.Formatter('[%(asctime)s | %(levelname)s] %(message)s')
+
     # 로그 파일의 이름을 사용자의 이메일로 설정
-    logfilename = './logs/' + user_email
+    logfilename = './logs/' + user_email + '.log'
     # filehandler 생성
     file_handler = logging.FileHandler(logfilename)
     # handler에 formatter 세팅
     file_handler.setFormatter(formatter)
+
     # handler를 logging에 추가
     mylogger.addHandler(file_handler)
+
+
+    return mylogger
+
+
 
 
 
@@ -328,7 +341,7 @@ def enable_music_play(response):
         music_info['music_title'] = music_title
         json.dump(music_info, f, ensure_ascii=False, indent=4, sort_keys=True)
 
-    stream['url'] = 'http://163.239.169.54:5001/stream/' + encoded_music_title
+    stream['url'] = 'http://163.239.169.54:5002/stream/' + encoded_music_title
     # 노래 재생 시작지점 '0'이면 처음부터
     stream['offsetInMilliseconds'] = 0
 
@@ -375,7 +388,7 @@ def ask_recipe():
     print('\ncurrent time : ' + str(datetime.datetime.now()))
     print('access token : ' + accessToken + '\n')
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
 
     output = {}
@@ -427,7 +440,7 @@ def inform_food_type():
         accessToken = 'dev'
 
     # 동일한 사용자인지 확인
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
@@ -507,7 +520,7 @@ def ask_ingredients():
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     output = {}
     for param in parameters:
@@ -584,7 +597,7 @@ def start_recipe():
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     output = {}
     for param in parameters:
@@ -652,7 +665,7 @@ def next():
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     output = {}
     for param in parameters:
@@ -731,7 +744,7 @@ def prev():
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     output = {}
     for param in parameters:
@@ -806,7 +819,7 @@ def repeat():
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     output = {}
     for param in parameters:
@@ -871,7 +884,7 @@ def start():
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     output = {}
     for param in parameters:
@@ -931,7 +944,7 @@ def confirm_yes():
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     output = {}
     for param in parameters:
@@ -1027,7 +1040,7 @@ def confirm_no():
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     output = {}
     for param in parameters:
@@ -1096,7 +1109,7 @@ def send_email():
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     output = {}
     for param in parameters:
@@ -1190,7 +1203,7 @@ def ask_music():
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     output = {}
     for param in parameters:
@@ -1253,7 +1266,7 @@ def ask_food_name():
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     output = {}
     for param in parameters:
@@ -1309,7 +1322,7 @@ def help():
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     output = {}
     for param in parameters:
@@ -1395,7 +1408,7 @@ def tutorial():
     action_name = req['action']['actionName']
     parameters = req['action']['parameters']
 
-    check_user(accessToken)
+    mylogger = check_user(accessToken)
 
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
