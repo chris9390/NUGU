@@ -553,14 +553,11 @@ def ask_ingredients():
     if current_recipe_step == 0:
         output['fulfillment_ask_ingredients'] = selected_recipe['ingredients'] + ' 이 필요합니다.'
         if accessToken == 'dev':
-            output[
-                'fulfillment_ask_ingredients'] += ' 레시피 상세 안내를 이메일 로도 전송해 드릴 수도 있어요. 이메일로 받아보시려면 NUGU 앱에서 구글 계정을 연동하세요.'
-            output[
-                'fulfillment_ask_ingredients'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 요리왕에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
+            output['fulfillment_ask_ingredients'] += ' 레시피 상세 안내를 이메일 로도 전송해 드릴 수도 있어요. 이메일로 받아보시려면 NUGU 앱에서 구글 계정을 연동하세요.'
+            output['fulfillment_ask_ingredients'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악 재생을 중지하고 싶으시면, "아리아, 종료" 혹은 "아리아, 그만" 이라고 말씀해주세요.'
             output['fulfillment_ask_ingredients'] += ' 레시피 안내를 시작하시려면, "레시피 시작" 이라고 이야기 해 주세요.'
         else:
-            output[
-                'fulfillment_ask_ingredients'] += ' 레시피 상세 안내를 이메일 로도 전송해 드릴 수 있어요. 이메일로 받아보시겠어요? "응 해줘" 또는 "아니 괜찮아" 로 말씀해주세요.'
+            output['fulfillment_ask_ingredients'] += ' 레시피 상세 안내를 이메일 로도 전송해 드릴 수 있어요. 이메일로 받아보시겠어요? "응 해줘" 또는 "아니 괜찮아" 로 말씀해주세요.'
 
         # 레시피 안내 시작전이기 때문에 step은 0으로 초기 설정
         update_user_info_json_file(accessToken, action_name, 0, selected_recipe, skip_mode)
@@ -631,7 +628,7 @@ def start_recipe():
     rand_num = random.randrange(0, len(next_step_invoke))
 
     # 첫번째 레시피 step 알림
-    output['fulfillment_start_recipe'] = selected_recipe['recipe'][current_recipe_step] + ' 다 되시면 먼저 노래를 종료한 뒤에, ' + \
+    output['fulfillment_start_recipe'] = selected_recipe['recipe'][current_recipe_step] + ' 다 되시면, ' + \
                                          next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
 
     update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode)
@@ -709,10 +706,9 @@ def next():
 
     # 마지막 recipe step 이라면
     if current_recipe_step >= len(selected_recipe['recipe']) - 1:
-        output[
-            'fulfillment_next'] += ' 이것이 요리의 마지막 안내입니다. 다시들으시려면 "아리아, 요리왕에서 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
+        output['fulfillment_next'] += ' 이것이 요리의 마지막 안내입니다. 다시들으시려면 "아리아, 요리왕에서 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
     else:
-        output['fulfillment_next'] += ' 다 되시면 먼저 노래를 종료한 뒤에, ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+        output['fulfillment_next'] += ' 다 되시면, ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
         # 랜덤 음악 재생
         enable_music_play(response)
 
@@ -788,7 +784,7 @@ def prev():
         output['fulfillment_prev'] += '이미 첫번째 단계입니다. ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
         update_user_info_json_file(accessToken, action_name, 1, selected_recipe, skip_mode)
     else:
-        output['fulfillment_prev'] += ' 다 되시면 먼저 노래를 종료한 뒤에, ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
+        output['fulfillment_prev'] += ' 다 되시면, ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
         # 랜덤 음악 재생
         enable_music_play(response)
         update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode)
@@ -852,13 +848,12 @@ def repeat():
     rand_num = random.randrange(0, len(next_step_invoke))
 
     try:
-        output['fulfillment_repeat'] = selected_recipe['recipe'][current_recipe_step] + ' 다 되시면 먼저 노래를 종료한 뒤에, ' + \
+        output['fulfillment_repeat'] = selected_recipe['recipe'][current_recipe_step] + ' 다 되시면, ' + \
                                        next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
         # 랜덤 음악 재생
         enable_music_play(response)
     except IndexError:
-        output[
-            'fulfillment_repeat'] = '이것이 요리의 마지막 안내입니다. 다시 들으시려면 "아리아, 요리왕에서 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
+        output['fulfillment_repeat'] = '이것이 요리의 마지막 안내입니다. 다시 들으시려면 "아리아, 요리왕에서 처음부터 안내" 라고 말해주세요. 저는 안내를 종료하겠습니다. 다음에 또 이용해주세요.'
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -986,14 +981,13 @@ def confirm_yes():
         if accessToken == 'dev':
             output['fulfillment_confirm_yes'] = 'NUGU builder로 테스트 하시거나, NUGU 앱에서 계정 연동을 하지 않으시면 이메일 발송이 불가능합니다.'
             output[
-                'fulfillment_confirm_yes'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 요리왕에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
+                'fulfillment_confirm_yes'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악 재생을 중지하고 싶으시면, "아리아, 종료" 혹은 "아리아, 그만" 이라고 말씀해주세요.'
             output['fulfillment_confirm_yes'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
 
         # 계정 연동 해제 후 다시 연결해야 하는 경우
         elif need_oauth_reconnect == 1:
             output['fulfillment_confirm_yes'] = '이메일 발송을 원하시면 NUGU 앱에서 계정 연동을 해제하시고, 다시 연결해주세요.'
-            output[
-                'fulfillment_confirm_yes'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 요리왕에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
+            output['fulfillment_confirm_yes'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악 재생을 중지하고 싶으시면, "아리아, 종료" 혹은 "아리아, 그만" 이라고 말씀해주세요.'
             output['fulfillment_confirm_yes'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
 
         # nugu app에서 계정 연동
@@ -1004,7 +998,7 @@ def confirm_yes():
             # send_gmail_to_user(accessToken, selected_recipe, action_name, current_recipe_step)
             output['fulfillment_confirm_yes'] = '레시피를 이메일로 발송하였습니다. 수신함을 확인해 보세요.'
             output[
-                'fulfillment_confirm_yes'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 요리왕에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
+                'fulfillment_confirm_yes'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악 재생을 중지하고 싶으시면, "아리아, 종료" 혹은 "아리아, 그만" 이라고 말씀해주세요.'
             output['fulfillment_confirm_yes'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
 
         update_user_info_json_file(accessToken, action_name, 0, selected_recipe, skip_mode)
@@ -1076,7 +1070,7 @@ def confirm_no():
     elif before_action == 'answer.ask_ingredients':
         output['fulfillment_confirm_no'] = '그럼 바로 레시피 안내를 시작할게요.'
         output[
-            'fulfillment_confirm_no'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 요리왕에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
+            'fulfillment_confirm_no'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악 재생을 중지하고 싶으시면, "아리아, 종료" 혹은 "아리아, 그만" 이라고 말씀해주세요.'
         output['fulfillment_confirm_no'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
         update_user_info_json_file(accessToken, action_name, 0, selected_recipe, skip_mode)
     elif before_action == 'answer.ask_recipe':
@@ -1147,7 +1141,7 @@ def send_email():
         # 레시피 설명 전
         if current_recipe_step == 0:
             output[
-                'fulfillment_send_email'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 요리왕에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
+                'fulfillment_send_email'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악 재생을 중지하고 싶으시면, "아리아, 종료" 혹은 "아리아, 그만" 이라고 말씀해주세요.'
             output['fulfillment_send_email'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
         # 레시피 설명 중
         else:
@@ -1157,7 +1151,7 @@ def send_email():
     elif need_oauth_reconnect == 1:
         output['fulfillment_send_email'] = '이메일 발송을 원하시면 NUGU 앱에서 계정 연동을 해제하시고, 다시 연결해주세요.'
         output[
-            'fulfillment_send_email'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 요리왕에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
+            'fulfillment_send_email'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악 재생을 중지하고 싶으시면, "아리아, 종료" 혹은 "아리아, 그만" 이라고 말씀해주세요.'
         output['fulfillment_send_email'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
 
     # nugu app에서 계정 연동
@@ -1170,7 +1164,7 @@ def send_email():
         if current_recipe_step == 0:
             output['fulfillment_send_email'] = '레시피를 이메일로 발송하였습니다. 수신함을 확인해보세요.'
             output[
-                'fulfillment_send_email'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악이 재생되고 있는 중에 요리왕에 다른 명령을 하고 싶으시면, 먼저 "아리아, 종료" 혹은 "아리아, 그만" 같이 말씀하셔서 음악을 중지시킨 후에 말씀해주세요.'
+                'fulfillment_send_email'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악 재생을 중지하고 싶으시면, "아리아, 종료" 혹은 "아리아, 그만" 이라고 말씀해주세요.'
             output['fulfillment_send_email'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
             update_user_info_json_file(accessToken, action_name, 0, selected_recipe, skip_mode)
         # 레시피 설명중
