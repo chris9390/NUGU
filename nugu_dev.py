@@ -10,6 +10,7 @@ from email.mime.text import MIMEText
 import urllib.parse
 import threading
 import logging
+import config
 
 
 app = Flask(__name__)
@@ -341,7 +342,8 @@ def enable_music_play(response):
         music_info['music_title'] = music_title
         json.dump(music_info, f, ensure_ascii=False, indent=4, sort_keys=True)
 
-    stream['url'] = 'http://163.239.169.54:5002/stream/' + encoded_music_title
+    #stream['url'] = 'http://163.239.169.54:5002/stream/' + encoded_music_title
+    stream['url'] = 'http://' + config.DEV_IP + ':' + config.DEV_PORT + '/stream/' + encoded_music_title
     # 노래 재생 시작지점 '0'이면 처음부터
     stream['offsetInMilliseconds'] = 0
 
@@ -399,8 +401,8 @@ def ask_recipe():
         for each_user_info in user_info:
             if each_user_info['accessToken'] == accessToken:
                 run_count = each_user_info['run_count']
-                # 3번 이상 사용했으면
-                if run_count >= 3:
+                # 3번 이상 사용했으면 고급 사용자 모드 트리거 (계정연동이 안되있는 경우는 제외)
+                if run_count >= 3 and accessToken != 'dev':
                     output['fulfillment_ask_recipe'] = '요리왕을 세번 이상 사용하셨네요! 자세한 사용법 설명이 생략되는, 고급 사용자 모드로 전환할까요? 응, 해줘 또는 아니, 괜찮아 로 말씀해주세요.'
                     update_user_info_json_file(accessToken, action_name, 0, None, 0)
                     response['version'] = '2.0'
@@ -1440,6 +1442,20 @@ def tutorial():
     return jsonify(response)
 
 
+
+@app.route('/answer.music_finished', methods=['POST'])
+def music_finished():
+    response = {}
+    output = {}
+
+    enable_music_play(response)
+
+    response['version'] = '2.0'
+    response['resultCode'] = 'OK'
+    response['output'] = output
+
+    return jsonify(response)
+
 # ======================================================================================================================
 
 
@@ -1455,4 +1471,4 @@ def health_check():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5002, debug=True, threaded=True)
+    app.run(host='0.0.0.0', port=config.DEV_PORT, debug=True, threaded=True)
