@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, g
 import os
 import json
 import requests
@@ -11,6 +11,8 @@ import urllib.parse
 import threading
 import logging
 import config
+import pymysql
+from db_helper import DB_Helper
 
 
 app = Flask(__name__)
@@ -31,6 +33,27 @@ def stream(filename):
     return send_from_directory(directory=uploads, filename=filename)
 
 
+
+
+def get_db():
+    db = getattr(g, '_database', None)
+
+    if db is None:
+        db = pymysql.connect(host='163.239.169.54',
+                             port=3306,
+                             user='s20131533',
+                             passwd='s20131533',
+                             db='slu_corpus',
+                             charset='utf8',
+                             cursorclass=pymysql.cursors.DictCursor)
+        g._database = db
+    else:
+        db.ping()
+
+    return db
+
+
+
 # ======================================================================================================================
 # 다양한 다음 단계 설명 유도 문장들
 next_step_invoke = ['아리아, 요리왕에서 "다음 안내 들려줘"',
@@ -45,16 +68,52 @@ prev_step_invoke = ['아리아, 요리왕에서 "전 단계 알려줘"',
 
 # 새로운 사용자인지 확인. 새로운 사용자면 info_user.json에 등록
 def check_user(accessToken):
-    is_new_user = 1
-    is_exist_access_token = 0
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
 
-    logfilename = ''
+    #is_new_user = 1
+    #is_exist_access_token = 0
+
     user_email = ''
 
-    # access token 테스트 용 코드
-    # a, b = get_user_email(accessToken)
-    # access token 테스트 용 코드
 
+    # ============ DB로 다시 코딩하는 부분 ============== #
+
+    existing_user = db_helper.select_by_token(accessToken)
+
+    # 해당 accessToken 등록되지 않음
+    if len(existing_user) == 0:
+        is_exist_access_token = 0
+    # access token이 등록된 사용자 이미 존재
+    else:
+        is_exist_access_token = 1
+        user_email = existing_user['user_email']
+
+    # DB에 등록되지 않은 access token 이라면
+    # 1. 새로운 사용자.
+    # 2. 기존 사용자의 access token 만료. 두가지 경우
+    if is_exist_access_token == 0:
+        user_email, is_saved_token = get_user_email(accessToken)
+
+        is_new_user = 1
+
+        # 2. 인 경우
+        if user_email is not None:
+            # 기존에 등록되어 있던 사용자의 accessToken refresh
+            db_helper.update_user_info_table('accessToken', accessToken, 'user_email', user_email)
+            is_new_user = 0
+
+        # 1. 인 경우
+        if is_new_user == 1:
+            if is_saved_token == 0:
+                db_helper.insert_new_user(accessToken, user_email, 1)
+            else:
+                db_helper.insert_new_user(accessToken, user_email, 0)
+
+    # ============ DB로 다시 코딩하는 부분 ============== #
+
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -82,8 +141,6 @@ def check_user(accessToken):
                 with open('./user_info.json', 'w', encoding='utf-8') as f:
                     json.dump(user_info, f, ensure_ascii=False, indent=4, sort_keys=True)
                 is_new_user = 0
-
-
                 break
             else:
                 is_new_user = 1
@@ -111,7 +168,7 @@ def check_user(accessToken):
             # 그리고 user_info.json 파일 업데이트
             with open('./user_info.json', 'w', encoding='utf-8') as f:
                 json.dump(user_info, f, ensure_ascii=False, indent=4, sort_keys=True)
-
+    '''
 
 
     if user_email == None:
@@ -343,7 +400,8 @@ def enable_music_play(response):
         json.dump(music_info, f, ensure_ascii=False, indent=4, sort_keys=True)
 
     #stream['url'] = 'http://163.239.169.54:5002/stream/' + encoded_music_title
-    stream['url'] = 'http://' + config.DEV_IP + ':' + config.DEV_PORT + '/stream/' + encoded_music_title
+    stream['url'] = 'http://' + str(config.IP) + ':' + str(config.PORT) + '/stream/' + encoded_music_title
+
     # 노래 재생 시작지점 '0'이면 처음부터
     stream['offsetInMilliseconds'] = 0
 
@@ -1471,4 +1529,4 @@ def health_check():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=config.DEV_PORT, debug=True, threaded=True)
+    app.run(host='0.0.0.0', port=config.IP, debug=True, threaded=True)
