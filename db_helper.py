@@ -26,9 +26,16 @@ class DB_Helper:
                                     port=3306,
                                     user='s20131533',
                                     passwd='s20131533',
-                                    db='slu_corpus',
+                                    db='nugu_dm',
                                     charset='utf8',
                                     cursorclass=pymysql.cursors.DictCursor)
+
+    def isdigit(self, x):
+        try:
+            temp = float(x)
+            return True
+        except:
+            return False
 
 
 
@@ -1062,8 +1069,10 @@ class DB_Helper:
     #################################################################################################
 
 
+
+
     def select_by_token(self, accessToken):
-        c = self.conn.curosr()
+        c = self.conn.cursor()
 
         sql = "SELECT * FROM user_info WHERE accessToken = '%s'" % accessToken
 
@@ -1075,7 +1084,7 @@ class DB_Helper:
 
 
     def select_by_email(self, user_email):
-        c = self.conn.curosr()
+        c = self.conn.cursor()
 
         sql = "SELECT * FROM user_info WHERE user_email = '%s'" % user_email
 
@@ -1089,7 +1098,31 @@ class DB_Helper:
     def update_user_info_table(self, col_upd, val_upd, col_cond, val_cond ):
         c = self.conn.cursor()
 
-        sql = "UPDATE user_info SET %s = '%s' WHERE %s = '%s'" % (col_upd, val_upd, col_cond, val_cond)
+        # val_upd 가 숫자이면
+        if self.isdigit(val_upd):
+            sql = "UPDATE user_info SET %s = %s WHERE %s = '%s'" % (col_upd, val_upd, col_cond, val_cond)
+        # val_upd 가 문자열이면
+        else:
+            sql = "UPDATE user_info SET %s = '%s' WHERE %s = '%s'" % (col_upd, val_upd, col_cond, val_cond)
+
+        c.execute(sql)
+        self.conn.commit()
+
+        #print("Number of rows updated: %d" % c.rowcount)
+        c.close()
+
+
+    def update_user_info_table_no_cond(self, col_upd, val_upd):
+        c = self.conn.cursor()
+
+        # val_upd 가 숫자이면
+        if self.isdigit(val_upd):
+            sql = "UPDATE user_info SET %s = %s" % (col_upd, val_upd)
+        # val_upd 가 문자열이면
+        else:
+            sql = "UPDATE user_info SET %s = '%s'" % (col_upd, val_upd)
+
+        #sql = "UPDATE user_info SET %s = '%s'" % (col_upd, val_upd)
 
         c.execute(sql)
         self.conn.commit()
@@ -1101,7 +1134,7 @@ class DB_Helper:
     def insert_new_user(self, accessToken, user_email, need_oauth_reconnect):
         c = self.conn.cursor()
 
-        sql = "INSERT INTO user_info (accessToken, user_email, need_oauth_reconnect, run_count, skip_mode) VALUES ('%s', '%s', %s, 0, 0)" % (accessToken, user_email, need_oauth_reconnect)
+        sql = "INSERT INTO user_info (accessToken, user_email, need_oauth_reconnect, run_count, skip_mode, selected_recipe) VALUES ('%s', '%s', %s, 0, 0, NULL)" % (accessToken, user_email, need_oauth_reconnect)
 
         c.execute(sql)
         self.conn.commit()

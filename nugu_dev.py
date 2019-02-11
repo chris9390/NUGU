@@ -43,7 +43,7 @@ def get_db():
                              port=3306,
                              user='s20131533',
                              passwd='s20131533',
-                             db='slu_corpus',
+                             db='nugu_dm',
                              charset='utf8',
                              cursorclass=pymysql.cursors.DictCursor)
         g._database = db
@@ -51,6 +51,13 @@ def get_db():
         db.ping()
 
     return db
+
+
+@app.teardown_appcontext
+def close_connection(exception):
+    db = getattr(g, '_database', None)
+    if db is not None:
+        db.close()
 
 
 
@@ -82,7 +89,7 @@ def check_user(accessToken):
     existing_user = db_helper.select_by_token(accessToken)
 
     # 해당 accessToken 등록되지 않음
-    if len(existing_user) == 0:
+    if existing_user == None:
         is_exist_access_token = 0
     # access token이 등록된 사용자 이미 존재
     else:
@@ -91,14 +98,17 @@ def check_user(accessToken):
 
     # DB에 등록되지 않은 access token 이라면
     # 1. 새로운 사용자.
-    # 2. 기존 사용자의 access token 만료. 두가지 경우
+    # 2. 기존 사용자의 access token 만료.
     if is_exist_access_token == 0:
         user_email, is_saved_token = get_user_email(accessToken)
 
         is_new_user = 1
 
-        # 2. 인 경우
-        if user_email is not None:
+        # 이메일로 사용자 검색
+        existing_user_2 = db_helper.select_by_email(user_email)
+
+        # 2. 인 경우 (이메일로 검색된 사용자가 있으면)
+        if existing_user_2 != None:
             # 기존에 등록되어 있던 사용자의 accessToken refresh
             db_helper.update_user_info_table('accessToken', accessToken, 'user_email', user_email)
             is_new_user = 0
@@ -204,6 +214,36 @@ def check_user(accessToken):
 def update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode):
     user_email = None
 
+    # ============ DB로 다시 코딩하는 부분 ============== #
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
+    existing_user = db_helper.select_by_token(accessToken)
+    run_count = existing_user['run_count']
+
+    db_helper.update_user_info_table('bef_bef_action', existing_user['before_action'], 'accessToken', accessToken)
+    # db_helper.update_user_info_table_no_cond('bef_bef_action', existing_user['before_action'])
+
+    db_helper.update_user_info_table('before_action', action_name, 'accessToken', accessToken)
+    #db_helper.update_user_info_table_no_cond('before_action', action_name)
+
+    if action_name == 'answer.inform_food_type':
+        db_helper.update_user_info_table('run_count', run_count + 1, 'accessToken', accessToken)
+        #db_helper.update_user_info_table_no_cond('run_count', run_count + 1)
+
+    db_helper.update_user_info_table('skip_mode', skip_mode, 'accessToken', accessToken)
+    #db_helper.update_user_info_table_no_cond('skip_mode', skip_mode)
+
+    db_helper.update_user_info_table('selected_recipe', selected_recipe, 'accessToken', accessToken)
+    #db_helper.update_user_info_table_no_cond('selected_recipe', selected_recipe)
+
+    db_helper.update_user_info_table('recipe_step', current_recipe_step, 'accessToken', accessToken)
+    #db_helper.update_user_info_table_no_cond('recipe_step', current_recipe_step)
+
+    # ============ DB로 다시 코딩하는 부분 ============== #
+
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -245,9 +285,13 @@ def update_user_info_json_file(accessToken, action_name, current_recipe_step, se
     # 사용자의 accessToken과 레시피 step을 user_info.json 파일에 저장.
     with open('./user_info.json', 'w', encoding='utf-8') as f:
         json.dump(user_info, f, ensure_ascii=False, indent=4, sort_keys=True)
+    '''
 
 
 def get_user_email(accessToken):
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     # accessToken이 user_info에 저장 되었는지 유무
     is_saved_token = 0
 
@@ -272,17 +316,37 @@ def get_user_email(accessToken):
     except Exception as e:
         print('access token expired :(')
         print('\nException at (get_user_email) : ' + str(e) + '\n')
+
+        existing_user = db_helper.select_by_token(accessToken)
+        if existing_user != None:
+            user_email = existing_user['user_email']
+            is_saved_token = 1
+
+        '''
         with open('./user_info.json', 'r', encoding='utf-8') as f:
             user_info = json.load(f)
             for each_user_info in user_info:
                 if each_user_info['accessToken'] == accessToken:
                     user_email = each_user_info['user_email']
                     is_saved_token = 1
+        '''
 
     return user_email, is_saved_token
 
 
 def send_gmail_to_user(accessToken, selected_recipe, action_name, current_recipe_step, run_count, skip_mode):
+    #db_conn = get_db()
+    #db_helper = DB_Helper(db_conn)
+
+    db_conn = pymysql.connect(host='163.239.169.54',
+                         port=3306,
+                         user='s20131533',
+                         passwd='s20131533',
+                         db='nugu_dm',
+                         charset='utf8',
+                         cursorclass=pymysql.cursors.DictCursor)
+    db_helper = DB_Helper(db_conn)
+
     try:
         google_access_token = accessToken
         credentials = google.oauth2.credentials.Credentials(google_access_token)
@@ -293,7 +357,12 @@ def send_gmail_to_user(accessToken, selected_recipe, action_name, current_recipe
         user_data = json.loads(user_data)
         user_email = user_data['email']
 
-        # access token으로 사용자의 이메일 주소를 알아낸뒤 user_info.json에 해당 사용자의 이메일 정보 추가
+
+        # access token으로 사용자의 이메일 주소를 알아낸뒤 DB에 해당 사용자의 이메일 정보 업데이트
+        db_helper.update_user_info_table('user_email', user_email, 'accessToken', accessToken)
+
+
+        '''
         with open('./user_info.json', 'r', encoding='utf-8') as f:
             user_info = json.load(f)
             for i, each_user_info in enumerate(user_info):
@@ -312,16 +381,22 @@ def send_gmail_to_user(accessToken, selected_recipe, action_name, current_recipe
 
         with open('./user_info.json', 'w', encoding='utf-8') as f:
             json.dump(user_info, f, ensure_ascii=False, indent=4, sort_keys=True)
+        '''
 
-
-    # access token이 만기되면 user_info.json에 저장되어 있던 사용자의 이메일 사용
+    # access token이 만기되면 DB에 저장되어 있던 사용자의 이메일 사용
     except:
+        existing_user = db_helper.select_by_token(accessToken)
+        if existing_user != None:
+            user_email = existing_user['user_email']
+
+        '''
         with open('./user_info.json', 'r', encoding='utf-8') as f:
             user_info = json.load(f)
             for each_user_info in user_info:
                 if each_user_info['accessToken'] == accessToken:
                     user_email = each_user_info['user_email']
                     break
+        '''
 
     # SMTP 세션 생성
     google_server = smtplib.SMTP('smtp.gmail.com', 587)
@@ -433,6 +508,9 @@ def enable_music_play(response):
 
 @app.route('/answer.ask_recipe', methods=['POST'])
 def ask_recipe():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     # print(json.dumps(req, indent=4))
@@ -454,6 +532,25 @@ def ask_recipe():
     output = {}
     output['fulfillment_ask_recipe'] = ''
 
+
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        run_count = existing_user['run_count']
+        # 3번 이상 사용했으면 고급 사용자 모드 트리거 (계정연동이 안되있는 경우는 제외)
+        if run_count >= 3 and accessToken != 'dev':
+            output['fulfillment_ask_recipe'] = '요리왕을 세번 이상 사용하셨네요! 자세한 사용법 설명이 생략되는, 고급 사용자 모드로 전환할까요? 응, 해줘 또는 아니, 괜찮아 로 말씀해주세요.'
+            update_user_info_json_file(accessToken, action_name, 0, None, 0)
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            response['directives'] = None
+
+            # 로그 추가
+            mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_ask_recipe'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -472,6 +569,7 @@ def ask_recipe():
                     mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_ask_recipe'])
 
                     return jsonify(response)
+    '''
 
     # 레시피 안내 시작전이기 때문에 step은 0으로 초기 설정
     update_user_info_json_file(accessToken, action_name, 0, None, 0)
@@ -491,6 +589,9 @@ def ask_recipe():
 
 @app.route('/answer.inform_food_type', methods=['POST'])
 def inform_food_type():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -519,7 +620,7 @@ def inform_food_type():
             # 사용자가 선택한 food type 찾는다
             if i['food_type'] == food_type:
                 rand_num = random.randrange(0, len(i['foods']))
-                # 랜덤 추천된 레시피 정보
+                # 랜덤 추천된 레시피 정보(dict 타입)
                 selected_recipe = i['foods'][rand_num]
                 break
 
@@ -527,6 +628,25 @@ def inform_food_type():
     for param in parameters:
         output[param] = parameters[param]['value']
 
+
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            skip_mode = existing_user['skip_mode']
+        except:
+            output['fulfillment_inform_food_type'] = '"레시피 추천해줘" 라고 먼저 말씀해주세요.'
+
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            response['directives'] = None
+
+            # 로그 추가
+            mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_inform_food_type'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -547,12 +667,12 @@ def inform_food_type():
                     return jsonify(response)
 
                 break
+    '''
+
 
     # 레시피 안내 시작전이기 때문에 step은 0으로 초기 설정
-    update_user_info_json_file(accessToken, action_name, 0, selected_recipe, skip_mode)
+    update_user_info_json_file(accessToken, action_name, 0, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
-    #output['fulfillment_food_type'] = food_type
-    #output['fulfillment_food_name'] = selected_recipe['food_name']
 
     output['fulfillment_inform_food_type'] = '오늘의 ' + food_type + '은 ' + selected_recipe['food_name'] + ' 입니다. 재료 안내를 원하시면 "재료 안내해줘" 라고 말씀해주세요.'
 
@@ -569,6 +689,9 @@ def inform_food_type():
 
 @app.route('/answer.ask_ingredients', methods=['POST'])
 def ask_ingredients():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -586,6 +709,33 @@ def ask_ingredients():
     for param in parameters:
         output[param] = parameters[param]['value']
 
+
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            current_recipe_step = existing_user['recipe_step']
+
+            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
+                selected_recipe = None
+            else:
+                selected_recipe = json.loads(existing_user['selected_recipe'])
+
+            skip_mode = existing_user['skip_mode']
+        except:
+            output['fulfillment_ask_ingredients'] = '"레시피 추천해줘" 라고 먼저 말씀해주세요.'
+
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            response['directives'] = None
+
+            # 로그 추가
+            mylogger.info(
+                'triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_ask_ingredients'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -608,6 +758,8 @@ def ask_ingredients():
                     return jsonify(response)
 
                 break
+    '''
+
 
     # 레시피 설명 시작 전
     if current_recipe_step == 0:
@@ -620,14 +772,14 @@ def ask_ingredients():
             output['fulfillment_ask_ingredients'] += ' 레시피 상세 안내를 이메일 로도 전송해 드릴 수 있어요. 이메일로 받아보시겠어요? "응 해줘" 또는 "아니 괜찮아" 로 말씀해주세요.'
 
         # 레시피 안내 시작전이기 때문에 step은 0으로 초기 설정
-        update_user_info_json_file(accessToken, action_name, 0, selected_recipe, skip_mode)
+        update_user_info_json_file(accessToken, action_name, 0, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
     # 레시피 설명 도중
     else:
         output['fulfillment_ask_ingredients'] = selected_recipe['ingredients'] + ' 입니다.'
-        output['fulfillment_ask_ingredients'] += ' 방금 단계를 다시 들으시려면 "아리아, 요리왕에서 방금 안내 다시 들려줘" 라고 이야기 해 주시고,'
+        output['fulfillment_ask_ingredients'] += ' 방금 단계를 다시 들으시려면 "아리아, 요리왕에서 방금 안내 한번더 들려줘" 라고 이야기 해 주시고,'
         output['fulfillment_ask_ingredients'] += ' 다음 단계로 넘어가시려면 "아리아, 요리왕에서 다음 안내 들려줘" 라고 이야기 해 주세요.'
 
-        update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode)
+        update_user_info_json_file(accessToken, action_name, current_recipe_step, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -642,6 +794,9 @@ def ask_ingredients():
 
 @app.route('/answer.start_recipe', methods=['POST'])
 def start_recipe():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -663,6 +818,30 @@ def start_recipe():
     # 첫번째 step 이기때문에 1로 고정 설정
     current_recipe_step = 1
 
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
+                selected_recipe = None
+            else:
+                selected_recipe = json.loads(existing_user['selected_recipe'])
+
+            skip_mode = existing_user['skip_mode']
+        except:
+            output['fulfillment_start_recipe'] = '아리아, 요리왕에서 레시피 추천해줘 라고 먼저 말씀해주세요.'
+
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            response['directives'] = None
+
+            # 로그 추가
+            mylogger.info(
+                'triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_start_recipe'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -683,6 +862,8 @@ def start_recipe():
 
                     return jsonify(response)
                 break
+    '''
+
 
     # 다음 단계 예상 발화 랜덤 발생
     rand_num = random.randrange(0, len(next_step_invoke))
@@ -691,7 +872,7 @@ def start_recipe():
     output['fulfillment_start_recipe'] = selected_recipe['recipe'][current_recipe_step] + ' 다 되시면, ' + \
                                          next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
 
-    update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode)
+    update_user_info_json_file(accessToken, action_name, current_recipe_step, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
     # 랜덤 음악 재생
     enable_music_play(response)
@@ -709,6 +890,9 @@ def start_recipe():
 
 @app.route('/answer.next', methods=['POST'])
 def next():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -728,6 +912,31 @@ def next():
     for param in parameters:
         output[param] = parameters[param]['value']
 
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            current_recipe_step = existing_user['recipe_step']
+
+            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
+                selected_recipe = None
+            else:
+                selected_recipe = json.loads(existing_user['selected_recipe'])
+
+            skip_mode = existing_user['skip_mode']
+        except:
+            output['fulfillment_next'] = '아리아, 요리왕에서 레시피 추천해줘 라고 먼저 말씀해주세요.'
+
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            response['directives'] = None
+
+            # 로그 추가
+            mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_next'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -750,6 +959,8 @@ def next():
                     return jsonify(response)
 
                 break
+    '''
+
 
     # 아직 마지막 단계가 아니라면 한 단계 증가
     if current_recipe_step != len(selected_recipe['recipe']) - 1:
@@ -772,7 +983,7 @@ def next():
         # 랜덤 음악 재생
         enable_music_play(response)
 
-    update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode)
+    update_user_info_json_file(accessToken, action_name, current_recipe_step, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -787,6 +998,9 @@ def next():
 
 @app.route('/answer.prev', methods=['POST'])
 def prev():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -806,6 +1020,30 @@ def prev():
     for param in parameters:
         output[param] = parameters[param]['value']
 
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            current_recipe_step = existing_user['recipe_step']
+
+            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
+                selected_recipe = None
+            else:
+                selected_recipe = json.loads(existing_user['selected_recipe'])
+
+            skip_mode = existing_user['skip_mode']
+        except:
+            output['fulfillment_prev'] = '아리아, 요리왕에서 레시피 추천해줘 라고 먼저 말씀해주세요.'
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            response['directives'] = None
+
+            # 로그 추가
+            mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_prev'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -826,6 +1064,8 @@ def prev():
 
                     return jsonify(response)
                 break
+    '''
+
 
     # 한 단계 감소
     current_recipe_step -= 1
@@ -842,12 +1082,12 @@ def prev():
     # 첫 번째 step 전으로 가려고 하면
     if current_recipe_step <= 0:
         output['fulfillment_prev'] += '이미 첫번째 단계입니다. ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
-        update_user_info_json_file(accessToken, action_name, 1, selected_recipe, skip_mode)
+        update_user_info_json_file(accessToken, action_name, 1, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
     else:
         output['fulfillment_prev'] += ' 다 되시면, ' + next_step_invoke[rand_num] + ' 라고 이야기 해 주세요.'
         # 랜덤 음악 재생
         enable_music_play(response)
-        update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode)
+        update_user_info_json_file(accessToken, action_name, current_recipe_step, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -862,6 +1102,9 @@ def prev():
 
 @app.route('/answer.repeat', methods=['POST'])
 def repeat():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -881,6 +1124,30 @@ def repeat():
     for param in parameters:
         output[param] = parameters[param]['value']
 
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            current_recipe_step = existing_user['recipe_step']
+
+            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
+                selected_recipe = None
+            else:
+                selected_recipe = json.loads(existing_user['selected_recipe'])
+
+            skip_mode = existing_user['skip_mode']
+        except:
+            output['fulfillment_repeat'] = '아리아, 요리왕에서 레시피 추천해줘 라고 먼저 말씀해주세요.'
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            # response['directives'] = None
+
+            # 로그 추가
+            mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_repeat'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -901,8 +1168,9 @@ def repeat():
 
                     return jsonify(response)
                 break
+    '''
 
-    update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode)
+    update_user_info_json_file(accessToken, action_name, current_recipe_step, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
     # 다음 단계 예상 발화 랜덤 발생
     rand_num = random.randrange(0, len(next_step_invoke))
@@ -928,6 +1196,9 @@ def repeat():
 
 @app.route('/answer.start', methods=['POST'])
 def start():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -945,6 +1216,30 @@ def start():
     for param in parameters:
         output[param] = parameters[param]['value']
 
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            current_recipe_step = existing_user['recipe_step']
+
+            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
+                selected_recipe = None
+            else:
+                selected_recipe = json.loads(existing_user['selected_recipe'])
+
+            skip_mode = existing_user['skip_mode']
+        except:
+            output['fulfillment_start'] = '레시피 추천해줘 라고 먼저 말씀해주세요.'
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            response['directives'] = None
+
+            # 로그 추가
+            mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_start'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -965,15 +1260,17 @@ def start():
 
                     return jsonify(response)
                 break
+    '''
+
 
     # 레시피 설명하기 전 처음으로 가고자 할 경우
     if current_recipe_step == 0:
         output['fulfillment_start'] = '한식, 중식, 일식, 양식, 분식 중에 선택해주세요.'
-        update_user_info_json_file(accessToken, action_name, 0, selected_recipe, skip_mode)
+        update_user_info_json_file(accessToken, action_name, 0, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
     # 레시피 설명 도중 처음으로 가고자 할 경우
     else:
         output['fulfillment_start'] = '다른 레시피를 추천해드릴까요? "응 해줘" 또는 "아니 괜찮아" 로 말씀해주세요.'
-        update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode)
+        update_user_info_json_file(accessToken, action_name, current_recipe_step, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -988,6 +1285,9 @@ def start():
 
 @app.route('/answer.confirm_yes', methods=['POST'])
 def confirm_yes():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -1007,6 +1307,35 @@ def confirm_yes():
 
     need_oauth_reconnect = 0
 
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            # confirm_yes intent로 들어오기 전에 무슨 action이었는지 확인하기 위한 용도
+            before_action = existing_user['before_action']
+            current_recipe_step = existing_user['recipe_step']
+
+            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
+                selected_recipe = None
+            else:
+                selected_recipe = json.loads(existing_user['selected_recipe'])
+
+
+            need_oauth_reconnect = existing_user['need_oauth_reconnect']
+            run_count = existing_user['run_count']
+            skip_mode = existing_user['skip_mode']
+        except:
+            output['fulfillment_confirm_yes'] = '레시피 추천해줘 라고 먼저 말씀해주세요.'
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            response['directives'] = None
+
+            # 로그 추가
+            mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_confirm_yes'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -1031,10 +1360,11 @@ def confirm_yes():
 
                     return jsonify(response)
                 break
+    '''
 
     if before_action == 'answer.start':
         output['fulfillment_confirm_yes'] = '한식, 중식, 일식, 양식, 분식 중에 선택해주시고, "한식 선택" 과 같이 "선택" 이란 단어를 붙여서 말씀해주세요.'
-        update_user_info_json_file(accessToken, action_name, 0, selected_recipe, skip_mode)
+        update_user_info_json_file(accessToken, action_name, 0, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
     # 이메일 전송할 경우
     elif before_action == 'answer.ask_ingredients':
         # nugu builder 사용 혹은 계정 미연동
@@ -1055,20 +1385,19 @@ def confirm_yes():
             t = threading.Thread(target=send_gmail_to_user, args=(
             accessToken, selected_recipe, action_name, current_recipe_step, run_count, skip_mode))
             t.start()
-            # send_gmail_to_user(accessToken, selected_recipe, action_name, current_recipe_step)
+
             output['fulfillment_confirm_yes'] = '레시피를 이메일로 발송하였습니다. 수신함을 확인해 보세요.'
             output[
                 'fulfillment_confirm_yes'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악 재생을 중지하고 싶으시면, "아리아, 종료" 혹은 "아리아, 그만" 이라고 말씀해주세요.'
             output['fulfillment_confirm_yes'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
 
-        update_user_info_json_file(accessToken, action_name, 0, selected_recipe, skip_mode)
+        update_user_info_json_file(accessToken, action_name, 0, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
     elif before_action == 'answer.ask_recipe':
         output[
             'fulfillment_confirm_yes'] = '고급 사용자 모드로 전환되었습니다. 한식, 중식, 일식, 양식, 분식 중에 선택해주시고, "한식 선택" 과 같이 "선택" 이란 단어를 붙여서 말씀해주세요.'
-        update_user_info_json_file(accessToken, action_name, 0, selected_recipe, 1)
+        update_user_info_json_file(accessToken, action_name, 0, json.dumps(selected_recipe, ensure_ascii=False), 1)
 
-    # update_user_info_json_file(accessToken, action_name, 0, selected_recipe, 0)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -1083,6 +1412,9 @@ def confirm_yes():
 
 @app.route('/answer.confirm_no', methods=['POST'])
 def confirm_no():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -1100,6 +1432,31 @@ def confirm_no():
     for param in parameters:
         output[param] = parameters[param]['value']
 
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            # confirm_no intent로 들어오기 전에 무슨 action이었는지 확인하기 위한 용도
+            before_action = existing_user['before_action']
+
+            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
+                selected_recipe = None
+            else:
+                selected_recipe = json.loads(existing_user['selected_recipe'])
+
+            skip_mode = existing_user['skip_mode']
+        except:
+            output['fulfillment_confirm_no'] = '레시피 추천해줘 라고 먼저 말씀해주세요.'
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            response['directives'] = None
+
+            # 로그 추가
+            mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_confirm_no'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -1121,22 +1478,24 @@ def confirm_no():
 
                     return jsonify(response)
                 break
+    '''
+
 
     if before_action == 'answer.start':
         output['fulfillment_confirm_no'] = '그럼 현재 레시피를 처음 단계부터 다시 알려드릴게요.'
         output['fulfillment_confirm_no'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
-        update_user_info_json_file(accessToken, action_name, 0, selected_recipe, skip_mode)
+        update_user_info_json_file(accessToken, action_name, 0, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
     # 이메일 전송 안하는 경우
     elif before_action == 'answer.ask_ingredients':
         output['fulfillment_confirm_no'] = '그럼 바로 레시피 안내를 시작할게요.'
         output[
             'fulfillment_confirm_no'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악 재생을 중지하고 싶으시면, "아리아, 종료" 혹은 "아리아, 그만" 이라고 말씀해주세요.'
         output['fulfillment_confirm_no'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
-        update_user_info_json_file(accessToken, action_name, 0, selected_recipe, skip_mode)
+        update_user_info_json_file(accessToken, action_name, 0, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
     elif before_action == 'answer.ask_recipe':
         output[
             'fulfillment_confirm_no'] = '네, 그럼 원래대로 설명드리겠습니다. 한식, 중식, 일식, 양식, 분식 중에 선택해주시고, "한식 선택" 과 같이 "선택" 이란 단어를 붙여서 말씀해주세요.'
-        update_user_info_json_file(accessToken, action_name, 0, selected_recipe, 0)
+        update_user_info_json_file(accessToken, action_name, 0, json.dumps(selected_recipe, ensure_ascii=False), 0)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -1151,6 +1510,9 @@ def confirm_no():
 
 @app.route('/answer.send_email', methods=['POST'])
 def send_email():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -1171,6 +1533,32 @@ def send_email():
 
     need_oauth_reconnect = 0
 
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            current_recipe_step = existing_user['recipe_step']
+
+            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
+                selected_recipe = None
+            else:
+                selected_recipe = json.loads(existing_user['selected_recipe'])
+
+            need_oauth_reconnect = existing_user['need_oauth_reconnect']
+            run_count = existing_user['run_count']
+            skip_mode = existing_user['skip_mode']
+        except:
+            output['fulfillment_send_email'] = '레시피 추천해줘 라고 먼저 말씀해주세요.'
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            response['directives'] = None
+
+            # 로그 추가
+            mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_send_email'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -1193,6 +1581,8 @@ def send_email():
 
                     return jsonify(response)
                 break
+    '''
+
 
     # nugu builder 사용 혹은 계정 미연동
     if accessToken == 'dev':
@@ -1216,21 +1606,20 @@ def send_email():
 
     # nugu app에서 계정 연동
     else:
-        t = threading.Thread(target=send_gmail_to_user, args=(
-        accessToken, selected_recipe, action_name, current_recipe_step, run_count, skip_mode))
+        t = threading.Thread(target=send_gmail_to_user, args=(accessToken, selected_recipe, action_name, current_recipe_step, run_count, skip_mode))
         t.start()
-        # send_gmail_to_user(accessToken, selected_recipe, action_name, current_recipe_step)
+
         # 레시피 설명하기 전
         if current_recipe_step == 0:
             output['fulfillment_send_email'] = '레시피를 이메일로 발송하였습니다. 수신함을 확인해보세요.'
             output[
                 'fulfillment_send_email'] += ' 요리하시는 동안 음악을 들려드릴건데요, 음악 재생을 중지하고 싶으시면, "아리아, 종료" 혹은 "아리아, 그만" 이라고 말씀해주세요.'
             output['fulfillment_send_email'] += ' 레시피 안내를 시작하시려면 "레시피 시작" 이라고 말씀해주세요.'
-            update_user_info_json_file(accessToken, action_name, 0, selected_recipe, skip_mode)
+            update_user_info_json_file(accessToken, action_name, 0, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
         # 레시피 설명중
         else:
             output['fulfillment_send_email'] = '레시피를 이메일로 발송하였습니다. 수신함을 확인해보세요. 레시피를 이어서 들으시려면 "다음안내 들려줘" 라고 말씀해주세요.'
-            update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode)
+            update_user_info_json_file(accessToken, action_name, current_recipe_step, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -1245,6 +1634,9 @@ def send_email():
 
 @app.route('/answer.ask_music', methods=['POST'])
 def ask_music():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -1263,6 +1655,29 @@ def ask_music():
     for param in parameters:
         output[param] = parameters[param]['value']
 
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
+                selected_recipe = None
+            else:
+                selected_recipe = json.loads(existing_user['selected_recipe'])
+
+            current_recipe_step = existing_user['recipe_step']
+            skip_mode = existing_user['skip_mode']
+        except:
+            output['fulfillment_ask_music'] = '아리아, 요리왕에서 레시피 추천해줘 라고 먼저 말씀해주세요.'
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            response['directives'] = None
+
+            # 로그 추가
+            mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_ask_music'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -1285,6 +1700,7 @@ def ask_music():
 
                     return jsonify(response)
                 break
+    '''
 
     with open('./recently_played_music.json', 'r', encoding='utf-8') as f:
         music_info = json.load(f)
@@ -1293,7 +1709,7 @@ def ask_music():
     output['fulfillment_ask_music'] = '방금 재생된 음악은 ' + music_title + ' 입니다.'
     output['fulfillment_ask_music'] += ' 다음 단계로 넘어가시려면 "아리아, 요리왕에서 다음 안내 들려줘" 라고 이야기 해 주세요.'
 
-    update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode)
+    update_user_info_json_file(accessToken, action_name, current_recipe_step, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -1308,6 +1724,9 @@ def ask_music():
 
 @app.route('/answer.ask_food_name', methods=['POST'])
 def ask_food_name():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -1326,6 +1745,30 @@ def ask_food_name():
     for param in parameters:
         output[param] = parameters[param]['value']
 
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
+                selected_recipe = None
+            else:
+                selected_recipe = json.loads(existing_user['selected_recipe'])
+
+            current_recipe_step = existing_user['recipe_step']
+            skip_mode = existing_user['skip_mode']
+        except:
+            output['fulfillment_ask_food_name'] = '아리아, 요리왕에서 레시피 추천해줘 라고 먼저 말씀해주세요.'
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            response['directives'] = None
+
+            # 로그 추가
+            mylogger.info(
+                'triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_ask_food_name'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -1346,10 +1789,12 @@ def ask_food_name():
 
                     return jsonify(response)
                 break
+    '''
+
 
     output['fulfillment_ask_food_name'] = '지금 만들고 계신 요리는 ' + selected_recipe['food_name'] + ' 입니다.'
 
-    update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode)
+    update_user_info_json_file(accessToken, action_name, current_recipe_step, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -1364,6 +1809,9 @@ def ask_food_name():
 
 @app.route('/answer.help', methods=['POST'])
 def help():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -1382,6 +1830,34 @@ def help():
     for param in parameters:
         output[param] = parameters[param]['value']
 
+
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
+                selected_recipe = None
+            else:
+                selected_recipe = json.loads(existing_user['selected_recipe'])
+
+            current_recipe_step = existing_user['recipe_step']
+            # 전 action
+            before_action = existing_user['before_action']
+            # 전 전 action
+            bef_bef_action = existing_user['bef_bef_action']
+            skip_mode = existing_user['skip_mode']
+        except:
+            output['fulfillment_help'] = '레시피 추천해줘 라고 먼저 말씀해주세요.'
+            response['version'] = '2.0'
+            response['resultCode'] = 'OK'
+            response['output'] = output
+            response['directives'] = None
+
+            # 로그 추가
+            mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_help'])
+
+            return jsonify(response)
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -1406,6 +1882,8 @@ def help():
 
                     return jsonify(response)
                 break
+    '''
+
 
     if before_action == 'answer.ask_recipe':
         output['fulfillment_help'] = '"한식 선택" 과 같이 "선택" 이란 단어를 붙여서 말씀해주세요.'
@@ -1416,7 +1894,7 @@ def help():
     elif before_action == 'answer.ask_ingredients' and (
             bef_bef_action == 'answer.start_recipe' or bef_bef_action == 'answer.next' or bef_bef_action == 'answer.repeat'):
         output[
-            'fulfillment_help'] = '방금 단계를 다시 들으시려면 "아리아, 요리왕에서 방금 안내 다시 들려줘" 라고 이야기 해 주시고, 다음 단계로 넘어가시려면 "아리아, 요리왕에서 다음 안내 들려줘" 라고 이야기 해 주세요.'
+            'fulfillment_help'] = '방금 단계를 다시 들으시려면 "아리아, 요리왕에서 방금 안내 한번더 들려줘" 라고 이야기 해 주시고, 다음 단계로 넘어가시려면 "아리아, 요리왕에서 다음 안내 들려줘" 라고 이야기 해 주세요.'
     elif before_action == 'answer.start_recipe' or before_action == 'answer.next' or before_action == 'answer.repeat' or before_action == 'answer.prev':
         output[
             'fulfillment_help'] = '"아리아, 요리왕에서 다음안내 들려줘" 라고 이야기 해보세요. 재료설명을 듣고 싶으시면 "아리아, 요리왕에서 재료 안내해줘" 라고 이야기 해보세요.'
@@ -1435,7 +1913,7 @@ def help():
     else:
         output['fulfillment_help'] = '"추천 레시피 알려줘" 라고 이야기 해 보세요.'
 
-    update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode)
+    update_user_info_json_file(accessToken, action_name, current_recipe_step, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -1450,6 +1928,9 @@ def help():
 
 @app.route('/answer.tutorial', methods=['POST'])
 def tutorial():
+    db_conn = get_db()
+    db_helper = DB_Helper(db_conn)
+
     response = {}
     req = json.loads(request.data.decode('utf-8'))
     print(json.dumps(req, indent=4))
@@ -1464,6 +1945,22 @@ def tutorial():
 
     mylogger = check_user(accessToken)
 
+    existing_user = db_helper.select_by_token(accessToken)
+    if existing_user != None:
+        try:
+            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
+                selected_recipe = None
+            else:
+                selected_recipe = json.loads(existing_user['selected_recipe'])
+
+            current_recipe_step = existing_user['recipe_step']
+            skip_mode = existing_user['skip_mode']
+        except:
+            selected_recipe = None
+            current_recipe_step = 0
+            skip_mode = 0
+
+    '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
         user_info = json.load(f)
         for each_user_info in user_info:
@@ -1477,6 +1974,8 @@ def tutorial():
                     current_recipe_step = 0
                     skip_mode = 0
                 break
+    '''
+
 
     output = {}
     for param in parameters:
@@ -1487,7 +1986,7 @@ def tutorial():
     output['fulfillment_tutorial'] += ' 이메일로 레시피를 받으시려면 "이메일로 레시피 보내줘", 노래 제목이 궁금하시면 "방금 재생된 음악 알려줘" 라고 말해보세요.'
     output['fulfillment_tutorial'] += ' 사용법을 다시들으시려면 "사용법 알려줘"라고, 시작하시려면 "레시피 추천해줘" 라고 말씀하세요.'
 
-    update_user_info_json_file(accessToken, action_name, current_recipe_step, selected_recipe, skip_mode)
+    update_user_info_json_file(accessToken, action_name, current_recipe_step, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
     response['version'] = '2.0'
     response['resultCode'] = 'OK'
@@ -1503,6 +2002,7 @@ def tutorial():
 
 @app.route('/answer.music_finished', methods=['POST'])
 def music_finished():
+
     response = {}
     output = {}
 
@@ -1529,4 +2029,4 @@ def health_check():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=config.IP, debug=True, threaded=True)
+    app.run(host='0.0.0.0', port=config.PORT, debug=True, threaded=True)
