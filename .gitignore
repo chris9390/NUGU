@@ -1,2 +1,5 @@
 .idea
+logs/
+music/
+nugu_bak.py
 config.py

@@ -712,16 +712,9 @@ def ask_ingredients():
 
     existing_user = db_helper.select_by_token(accessToken)
     if existing_user != None:
-        try:
-            current_recipe_step = existing_user['recipe_step']
+        current_recipe_step = existing_user['recipe_step']
 
-            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
-                selected_recipe = None
-            else:
-                selected_recipe = json.loads(existing_user['selected_recipe'])
-
-            skip_mode = existing_user['skip_mode']
-        except:
+        if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
             output['fulfillment_ask_ingredients'] = '"레시피 추천해줘" 라고 먼저 말씀해주세요.'
 
             response['version'] = '2.0'
@@ -734,6 +727,11 @@ def ask_ingredients():
                 'triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_ask_ingredients'])
 
             return jsonify(response)
+        else:
+            selected_recipe = json.loads(existing_user['selected_recipe'])
+
+        skip_mode = existing_user['skip_mode']
+
 
     '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
@@ -776,8 +774,8 @@ def ask_ingredients():
     # 레시피 설명 도중
     else:
         output['fulfillment_ask_ingredients'] = selected_recipe['ingredients'] + ' 입니다.'
-        output['fulfillment_ask_ingredients'] += ' 방금 단계를 다시 들으시려면 "아리아, 요리왕에서 방금 안내 한번더 들려줘" 라고 이야기 해 주시고,'
-        output['fulfillment_ask_ingredients'] += ' 다음 단계로 넘어가시려면 "아리아, 요리왕에서 다음 안내 들려줘" 라고 이야기 해 주세요.'
+        output['fulfillment_ask_ingredients'] += ' 방금 단계를 다시 들으시려면 "방금 안내 한번더 들려줘" 라고 이야기 해 주시고,'
+        output['fulfillment_ask_ingredients'] += ' 다음 단계로 넘어가시려면 "다음 안내 들려줘" 라고 이야기 해 주세요.'
 
         update_user_info_json_file(accessToken, action_name, current_recipe_step, json.dumps(selected_recipe, ensure_ascii=False), skip_mode)
 
@@ -820,14 +818,7 @@ def start_recipe():
 
     existing_user = db_helper.select_by_token(accessToken)
     if existing_user != None:
-        try:
-            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
-                selected_recipe = None
-            else:
-                selected_recipe = json.loads(existing_user['selected_recipe'])
-
-            skip_mode = existing_user['skip_mode']
-        except:
+        if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
             output['fulfillment_start_recipe'] = '아리아, 요리왕에서 레시피 추천해줘 라고 먼저 말씀해주세요.'
 
             response['version'] = '2.0'
@@ -840,6 +831,11 @@ def start_recipe():
                 'triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_start_recipe'])
 
             return jsonify(response)
+        else:
+            selected_recipe = json.loads(existing_user['selected_recipe'])
+
+        skip_mode = existing_user['skip_mode']
+
 
     '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
@@ -914,16 +910,9 @@ def next():
 
     existing_user = db_helper.select_by_token(accessToken)
     if existing_user != None:
-        try:
-            current_recipe_step = existing_user['recipe_step']
+        current_recipe_step = existing_user['recipe_step']
 
-            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
-                selected_recipe = None
-            else:
-                selected_recipe = json.loads(existing_user['selected_recipe'])
-
-            skip_mode = existing_user['skip_mode']
-        except:
+        if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
             output['fulfillment_next'] = '아리아, 요리왕에서 레시피 추천해줘 라고 먼저 말씀해주세요.'
 
             response['version'] = '2.0'
@@ -935,6 +924,11 @@ def next():
             mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_next'])
 
             return jsonify(response)
+        else:
+            selected_recipe = json.loads(existing_user['selected_recipe'])
+
+        skip_mode = existing_user['skip_mode']
+
 
     '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
@@ -1022,16 +1016,9 @@ def prev():
 
     existing_user = db_helper.select_by_token(accessToken)
     if existing_user != None:
-        try:
-            current_recipe_step = existing_user['recipe_step']
+        current_recipe_step = existing_user['recipe_step']
 
-            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
-                selected_recipe = None
-            else:
-                selected_recipe = json.loads(existing_user['selected_recipe'])
-
-            skip_mode = existing_user['skip_mode']
-        except:
+        if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
             output['fulfillment_prev'] = '아리아, 요리왕에서 레시피 추천해줘 라고 먼저 말씀해주세요.'
             response['version'] = '2.0'
             response['resultCode'] = 'OK'
@@ -1042,6 +1029,11 @@ def prev():
             mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_prev'])
 
             return jsonify(response)
+        else:
+            selected_recipe = json.loads(existing_user['selected_recipe'])
+
+        skip_mode = existing_user['skip_mode']
+
 
     '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
@@ -1126,16 +1118,9 @@ def repeat():
 
     existing_user = db_helper.select_by_token(accessToken)
     if existing_user != None:
-        try:
-            current_recipe_step = existing_user['recipe_step']
+        current_recipe_step = existing_user['recipe_step']
 
-            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
-                selected_recipe = None
-            else:
-                selected_recipe = json.loads(existing_user['selected_recipe'])
-
-            skip_mode = existing_user['skip_mode']
-        except:
+        if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
             output['fulfillment_repeat'] = '아리아, 요리왕에서 레시피 추천해줘 라고 먼저 말씀해주세요.'
             response['version'] = '2.0'
             response['resultCode'] = 'OK'
@@ -1146,6 +1131,11 @@ def repeat():
             mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_repeat'])
 
             return jsonify(response)
+        else:
+            selected_recipe = json.loads(existing_user['selected_recipe'])
+
+        skip_mode = existing_user['skip_mode']
+
 
     '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
@@ -1218,16 +1208,9 @@ def start():
 
     existing_user = db_helper.select_by_token(accessToken)
     if existing_user != None:
-        try:
-            current_recipe_step = existing_user['recipe_step']
+        current_recipe_step = existing_user['recipe_step']
 
-            if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
-                selected_recipe = None
-            else:
-                selected_recipe = json.loads(existing_user['selected_recipe'])
-
-            skip_mode = existing_user['skip_mode']
-        except:
+        if existing_user['selected_recipe'] == None or existing_user['selected_recipe'] == 'None':
             output['fulfillment_start'] = '레시피 추천해줘 라고 먼저 말씀해주세요.'
             response['version'] = '2.0'
             response['resultCode'] = 'OK'
@@ -1238,6 +1221,11 @@ def start():
             mylogger.info('triggered action : ' + action_name + ' | fulfillment : ' + output['fulfillment_start'])
 
             return jsonify(response)
+        else:
+            selected_recipe = json.loads(existing_user['selected_recipe'])
+
+        skip_mode = existing_user['skip_mode']
+
 
     '''
     with open('./user_info.json', 'r', encoding='utf-8') as f:
